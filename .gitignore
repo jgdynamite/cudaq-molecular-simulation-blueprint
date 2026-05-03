@@ -77,6 +77,9 @@ infra/ansible/*.vault
 logs/
 .runlogs/
 
+# Static UI export (built by `python -m app.ui.static_export`)
+_site/
+
 # Generated archives
 *.tgz
 *.tar.gz

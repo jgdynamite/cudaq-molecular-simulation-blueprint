@@ -9,6 +9,12 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![CUDA-Q 0.14](https://img.shields.io/badge/cudaq-0.14-76B900.svg)](https://nvidia.github.io/cuda-quantum/)
 
+**Live UI demo (Akamai Object Storage):**
+**<https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/>**
+- pre-rendered snapshot of the FastAPI/HTMX UI
+- shows the actual Jakarta Blackwell run as the host fingerprint
+- the "Run an experiment" form is intentionally inert (clone the repo to run live)
+
 This project supports the technical blog post **"Why GPUs Matter to Quantum
 Before QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
 Simulation."** It exists to make the hybrid quantum workflow concrete,
@@ -103,6 +109,46 @@ team to get it enabled. Stock currently lives in `id-cgk` (Jakarta) and
 `br-gru` (Sao Paulo). Full walkthrough including firewall, NVIDIA driver
 flavor, and image-distribution strategy in
 [docs/akamai-deployment.md](docs/akamai-deployment.md).
+
+---
+
+## Deploy a public read-only UI snapshot (Akamai Object Storage)
+
+Once you have benchmark results in `results/`, you can pre-render the UI to
+a static bundle and host it on Akamai Object Storage for ~$5/month flat. The
+result is the public `website-...linodeobjects.com` URL linked at the top
+of this README.
+
+```bash
+uv run python -m app.ui.static_export \
+    --results-dir results/akamai-jakarta \
+    --output-dir _site
+
+# Object Storage credentials must be created via Cloud Manager or the
+# Linode API: POST /v4/object-storage/buckets and POST /v4/object-storage/keys
+# (scope the key to the bucket only). Then:
+aws s3 sync _site/ s3://<your-bucket>/ \
+    --endpoint-url https://us-east-1.linodeobjects.com --acl public-read
+aws s3api put-bucket-website --bucket <your-bucket> \
+    --endpoint-url https://us-east-1.linodeobjects.com \
+    --website-configuration \
+    '{"IndexDocument":{"Suffix":"index.html"},"ErrorDocument":{"Key":"404.html"}}'
+```
+
+Notes from this project's first deployment:
+
+- The bucket-creation API picks a sub-cluster automatically. We hit a
+  broken `us-iad-10` cluster on first try (TLS handshake reset on every
+  connection); recreating in `us-east` got us a healthy `us-east-1`
+  bucket. If you see "Connection reset by peer" on `aws s3 ls`, delete
+  the bucket and pick a different region.
+- Set ACL to `public-read` on objects and explicitly `Content-Type:
+  text/html; charset=utf-8` on every `index.html` (the auto-detection
+  via `aws s3 sync` defaulted to `application/octet-stream` for some
+  HTML files and the browser would offer them as a download).
+- Use the `bucket.website-<cluster>.linodeobjects.com` URL for browsing,
+  not the `bucket.<cluster>.linodeobjects.com` S3 endpoint. Only the
+  former auto-resolves `/run/` to `/run/index.html`.
 
 ---
 

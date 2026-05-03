@@ -149,6 +149,8 @@ ignore = [
 # API lazy-imports the experiment runners (cudaq cost) and UI module (UI is optional).
 "app/api/main.py" = ["PLC0415"]
 "app/api/routes/run.py" = ["PLC0415"]
+# Static export configures CUDAQ_BP_RESULTS_DIR before importing settings-aware modules.
+"app/ui/static_export.py" = ["PLC0415"]
 # Coordinator singleton is intentional.
 "app/api/deps.py" = ["PLW0603"]
 
