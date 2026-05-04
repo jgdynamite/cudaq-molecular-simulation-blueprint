@@ -284,11 +284,10 @@ optimizer is searching in a 92-dimensional parameter space for a minimum
 that lives on a 5-orbital support, and COBYLA does not consistently find
 it within 1500 iterations.
 
-The right next step is to align the active-space Hamiltonian, ansatz
-dimension, and reference calculation, then rerun the multi-seed
-benchmark. Until then, treat the LiH error numbers as a
-*lower-bound-on-residual* for this specific UCCSD configuration, not as
-a statement about what the algorithm can achieve in principle.
+For this post, that caveat is enough. The LiH result should be read as
+an infrastructure benchmark with a clearly disclosed
+chemistry-convergence limitation, not as a final chemistry-accuracy
+claim.
 
 ---
 
@@ -345,8 +344,10 @@ helps.** Below the threshold the GPU is overhead; above it, the GPU
 pays for itself in wall time and unlocks problem sizes a CPU cannot
 practically reach. Knowing where the threshold is &mdash; for your
 specific Hamiltonian shape, your specific ansatz, your specific
-optimizer &mdash; is the engineering work. The two data points
-published here are intended as a starting curve others can extend.
+optimizer &mdash; is the engineering work. The two data points are enough for the narrow claim this post makes:
+tiny workloads may not benefit from GPU acceleration, while the larger
+LiH workload shows a measurable and repeatable GPU wall-time advantage
+on the same host.
 
 **3. Reproducibility belongs in the design, not the appendix.** Every
 run in this project captures CUDA-Q version, GPU model, driver
