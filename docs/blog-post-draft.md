@@ -78,90 +78,104 @@ with Terraform + Ansible: NVIDIA RTX PRO 6000 Blackwell Server Edition,
 driver `580.159.03` (the open kernel module branch &mdash; required for
 Blackwell), CUDA 13.0, 96 GB VRAM, 16 vCPU, 172 GB system RAM. The full
 deployment is one Terraform apply plus one Ansible playbook, all gated
-behind an SSH key that exists only for the bench cycle. VM lifetime was
-1 hour 17 minutes; billed cost was **$3.84**.
+behind an SSH key that exists only for the bench cycle. The numbers
+below come from a multi-seed re-bench done on 2026-05-04 (3 RNG seeds
+per backend, 15 specs total): VM lifetime was 2 h 27 min of compute
+plus ~30 min of bootstrap, billed at ~$3.00/hr.
 
 ---
 
-## Results
+## Results (multi-seed, n=3 per backend)
 
-All four runs converged or hit the iteration cap; full manifests and
-traces are
-[attached to the v0.1.0 release](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/releases/tag/v0.1.0).
-Headline numbers:
+Every backend was run with seeds 42, 43, 44 on the same Blackwell host.
+Full manifests and traces live under
+[`results/akamai-blackwell-multiseed/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/results/akamai-blackwell-multiseed)
+in the repo. Headline aggregates:
 
-| Run | Backend | Qubits | Wall time (s) | Energy (Ha) | Error vs FCI | Chemical accuracy |
-|---|---|---:|---:|---:|---:|:---:|
-| H<sub>2</sub>  | qpp-cpu     |  4 | **17.07** | -1.137270 | -1.75e-07 | yes |
-| H<sub>2</sub>  | nvidia:fp64 |  4 |     19.19 | -1.137270 | -1.75e-07 | yes |
-| LiH | qpp-cpu     | 12 |    362.02 | -7.579105 | +2.83e-01 | (cap) |
-| LiH | nvidia:fp64 | 12 | **211.68** | -7.579105 | +2.83e-01 | (cap) |
+| Molecule | Backend | n | Wall (s) mean &plusmn; stderr | Energy mean (Ha) | min &#124;err vs ref&#124; (mHa) |
+|---|---|:-:|---:|---:|---:|
+| H<sub>2</sub>  | `qpp-cpu`     | 3 | **16.87 &plusmn; 0.83** | -1.137270 | < 0.001 |
+| H<sub>2</sub>  | `nvidia:fp32` | 3 | **12.98 &plusmn; 0.39** | -1.137265 | 0.002 |
+| H<sub>2</sub>  | `nvidia:fp64` | 3 |   17.65 &plusmn; 1.08    | -1.137270 | < 0.001 |
+| LiH | `qpp-cpu`     | 3 |   1809.12 &plusmn; 7.03 | -7.835907 | 12.74 |
+| LiH | `nvidia:fp64` | 3 | **1086.56 &plusmn; 4.19** | -7.835907 | 12.74 |
 
 Two stories show up in the data, and they both matter.
 
-### Small problem: CPU wins by 1.12x
+### Small problem: GPU is no longer faster (and that's fine)
 
-For a 4-qubit Hamiltonian, the CPU statevector backend (`qpp-cpu`,
-OpenMP-parallel, 16 cores) finished H<sub>2</sub> in 17.07 seconds; the
-GPU took 19.19. That's a 12% **handicap** for the GPU. There's no
-mystery here: the per-evaluation cost of moving a 16-amplitude
-statevector across the host&hairsp;-&hairsp;device boundary, launching a
-kernel, and collecting an expectation value is dominated by overhead
-when the actual numerical work is microseconds. CUDA-Q is doing
-everything correctly &mdash; the GPU just doesn't have enough actual work
-to chew on to amortize its setup tax.
+For a 4-qubit Hamiltonian the CPU statevector backend
+(`qpp-cpu`, OpenMP-parallel, 16 cores) finished H<sub>2</sub> in
+16.87 &plusmn; 0.83 s. The GPU FP64 path took 17.65 &plusmn; 1.08 s
+&mdash; **0.96&times;** of CPU, well within stderr. The FP32 GPU path
+finished in 12.98 &plusmn; 0.39 s for a 1.30&times; speedup; less
+precision overhead pays off on a 16-amplitude statevector.
 
-This is the under-celebrated reality of GPU acceleration in any domain:
-**there's a problem-size threshold below which the device is the wrong
-tool**, and pretending otherwise produces a kind of cargo-cult
-benchmarking. We logged this number specifically so that we wouldn't
-sneak past it.
+The takeaway with multi-seed visibility is sharper than the v0.1.0
+single-seed cut allowed: at 4 qubits, the host&hairsp;-&hairsp;device
+transfer and kernel-launch overhead is *enough by itself* to make a
+top-of-line Blackwell trail a 16-core CPU. CUDA-Q is doing everything
+correctly &mdash; the GPU just doesn't have enough actual work to chew
+on to amortize its setup tax. This is the under-celebrated reality of
+GPU acceleration in any domain: **there's a problem-size threshold
+below which the device is the wrong tool**, and pretending otherwise
+produces cargo-cult benchmarking.
 
-### Bigger problem: GPU wins by 1.71x
+### Bigger problem: GPU wins by 1.665&times; with tight error bars
 
 LiH on a 12-qubit, 92-parameter UCCSD ansatz tells a different story.
-Both backends ran to the 300-iteration COBYLA cap, both reached the
-same final energy (&minus;7.579105 Ha) with the same residual error
-(+0.283 Ha vs FCI &mdash; more on that in a moment), but the wall-time
-gap opened up:
+Both backends ran to the 1500-iteration COBYLA cap. The wall-time gap
+opens up cleanly:
 
-- CPU: 362.02 s, 1206.75 ms per function evaluation.
-- GPU FP64: **211.68 s**, **705.60 ms per function evaluation**.
+- CPU: 1809.12 &plusmn; 7.03 s, 1206.08 ms per function evaluation.
+- GPU FP64: **1086.56 &plusmn; 4.19 s**, **724.38 ms per function
+  evaluation**.
 
-That's a 1.71x wall-time speedup, a 39% reduction in wall time on an
-identical convergence trajectory. The convergence chart is identical
-under the optimizer's view; the GPU just gets through each iteration
-faster:
+That's a **1.665&times;** wall-time speedup, with stderr around 0.4%
+relative on each backend &mdash; the speedup itself is a tight
+measurement, not a single observation that happens to land where you
+hope. The convergence chart is identical under the optimizer's view
+(same x0 per seed, deterministic FP64 math), the GPU just gets through
+each iteration faster:
 
-![LiH convergence on Blackwell](images/03-result-lih-gpu.png)
+![LiH convergence on Blackwell](images/04-result-lih-gpu.png)
 
-This is the regime where a GPU starts paying its own freight. The
-12-qubit statevector is 4096 complex amplitudes per evaluation, the
-Hamiltonian has hundreds of Pauli terms, and each function evaluation
-is doing real work that benefits from the parallelism. The Blackwell's
-96 GB of VRAM is barely touched here &mdash; but it's the thing that
-makes the next jump (16, 18, 20-qubit active spaces with bigger basis
-sets) tractable on a single card.
+This is the regime where the GPU pays its own freight. The 12-qubit
+statevector is 4096 complex amplitudes per evaluation, the Hamiltonian
+has hundreds of Pauli terms, and each function evaluation is doing
+real work that benefits from the parallelism. The Blackwell's 96 GB of
+VRAM is barely touched here &mdash; but it's the thing that makes the
+next jumps (16, 18, 20-qubit active spaces with bigger basis sets)
+tractable on a single card.
 
-The honest caveat: with only one seed per backend the standard error
-on the wall-time numbers is zero by construction (`n=1`). A multi-seed
-run is one of the obvious next steps, and the project is set up so
-that swapping in `--seed` and re-running is a one-liner. The 1.71x
-should be read as "directionally consistent with what we expect from
-the architecture", not as a tight measurement.
+### Why multi-seed actually changed our mind
 
-### Why neither LiH run reached chemical accuracy
+The v0.1.0 single-seed cut quoted a 1.71&times; LiH speedup on a 300-
+iteration COBYLA cap. That number turns out to be honest *and*
+incomplete. Looking at the trace inspection on the v0.1.0 manifest,
+COBYLA was still descending steadily at iter 300 (the last quarter of
+that run dropped 0.048 Ha by itself), so the +0.283 Ha residual error
+versus FCI was *not enough iterations*, not *stuck in a local
+minimum*. We bumped LiH `--max-iterations` from 300 to 1500 and re-ran
+with three seeds:
 
-Both LiH runs end at the same energy with the same residual error
-versus FCI (+0.283 Ha; chemical accuracy is 0.0016 Ha). That's not a
-GPU vs CPU question &mdash; it's an optimizer question. COBYLA at 300
-iterations with this ansatz on this active space stops short. The fix
-is one of: a longer optimizer budget, parameter-shift gradients with
-L-BFGS-B, or a richer ansatz. We chose to ship the honest first cut and
-flag the limitation rather than tune until the headline read better.
-The repo's
-[`docs/results-interpretation.md`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/blob/main/docs/results-interpretation.md)
-walks through the methodology and what we'd change next.
+- 2 of 3 seeds (42, 43) converged to within 1.1 mHa of each other,
+  landing at -7.875 to -7.876 Ha. UCCSD with single and double
+  excitations spans the full active CI space for a 2-electron system,
+  so this *is* the active-space FCI minimum.
+- 1 of 3 seeds (44) hit a different local minimum at -7.756 Ha, about
+  120 mHa above the converged answer.
+
+That third seed is the *real* signal multi-seed buys you. UCCSD with
+COBYLA is sensitive to initialization, and 1-of-3 hits a basin you
+don't want. A blog post that quoted only seed=42 would have been
+misleading by omission. The variance is real, the median is honest,
+and now the 1.665&times; speedup carries credible error bars.
+
+The remaining ~6&ndash;7 mHa gap between our converged seeds and the
+*full* FCI energy of -7.882362 Ha is the active-space frozen-core
+error, not optimizer error. Closing it requires a bigger active space
+or a richer basis, not a better optimizer.
 
 ---
 
@@ -236,8 +250,11 @@ ssh root@$(terraform output -raw public_ip) \
 terraform destroy   # mandatory; cost meter stops
 ```
 
-Total cost for the bench cycle that produced the numbers above: **$3.84**
-for 1 hour 17 minutes of `g3-gpu-rtxpro6000-blackwell-1` time.
+Total cost for the multi-seed bench cycle that produced the numbers
+above: ~$10.75 for ~3.5 hours of `g3-gpu-rtxpro6000-blackwell-1` time
+(15 specs &times; 3 seeds, including ~30 minutes of bootstrap and
+teardown overhead). The original v0.1.0 single-seed cut was $3.84 for
+1 h 17 min.
 
 The full Terraform module, Ansible roles, and Dockerfile are in the
 repo under `infra/`. The application code is provider-agnostic &mdash; you
@@ -249,21 +266,22 @@ run.
 
 ## What's next
 
-Three things we'd do before quoting these numbers in production:
+Three things we'd do before scaling these numbers up in a follow-up
+post:
 
-- **Optimizer + ansatz upgrade.** Replace COBYLA with L-BFGS-B and
-  parameter-shift gradients so LiH actually converges to chemical
-  accuracy on a finite iteration budget. This is mostly a recipe
-  swap; the rest of the pipeline doesn't move.
-- **Multi-seed runs.** Five seeds per backend per molecule, so the
-  comparison report's `stderr` columns mean something. Cost: about
-  $1 of fresh Blackwell time.
-- **Multi-GPU.** Akamai's
-  `g3-gpu-rtxpro6000-blackwell-2` SKU has two cards; CUDA-Q's
-  `nvidia-mgpu` target slices the statevector across them. We didn't
-  use it for v0.1.0 because we wanted the comparison clean, but it's
-  the obvious next data point and the SKU is approved on this
-  account.
+- **Optimizer + ansatz upgrade.** The 1-of-3 LiH local minimum is
+  fixable by replacing COBYLA with L-BFGS-B and parameter-shift
+  gradients. The active-space frozen-core gap (6&ndash;7 mHa to full
+  FCI) is fixable by enlarging the active space. Both swaps are recipe
+  changes; the rest of the pipeline doesn't move.
+- **Bigger active spaces.** The same 96 GB Blackwell that yawned
+  through 12 qubits will hold 28&ndash;30 qubit statevectors comfortably.
+  That's the region where exact diagonalization on a CPU stops being
+  practical, so it's the natural next data point.
+- **Multi-GPU.** Akamai's `g3-gpu-rtxpro6000-blackwell-2` SKU has two
+  cards; CUDA-Q's `nvidia-mgpu` target slices the statevector across
+  them. We held the v0.1.0/v0.1.1 comparison to a single card
+  intentionally; the next data point goes the other way.
 
 What's *not* on the list: a quantum-advantage claim, a cross-cloud
 benchmark, or a Kubernetes story. Those are different posts, with

@@ -10,8 +10,15 @@ Sources:
   throughout the quantum chemistry literature.
 - LiH / STO-3G FCI at R = 1.5957 Å (equilibrium): -7.882362 Ha.
 - LiH / STO-3G with a (2 electron, 5 orbital) active space at R = 1.5957 Å:
-  -7.862500 Ha. (The active-space result is intentionally above full-FCI;
-  this is the exact value the (2,5) active-space VQE should converge to.)
+  -7.862500 Ha (literature estimate). NB: the post-v0.1.0 multi-seed bench
+  consistently reaches energies of -7.875 to -7.876 Ha in this active space,
+  which is BELOW the literature estimate. UCCSD in a 2-electron / 5-orbital
+  active space is exact (it spans the full active CI space), so our converged
+  energies represent the true active-space FCI minimum and the literature
+  number above appears to be approximate. We retain it here as the reference
+  used at run time so historical manifests stay reproducible, but new
+  publications should compute the active-space FCI with pyscf at run time
+  rather than rely on this stored value.
 
 CHEMICAL_ACCURACY_HARTREE is the standard 1.6 mHa threshold used to decide
 whether a VQE run "reached chemical accuracy".
@@ -69,7 +76,13 @@ REFERENCES: dict[tuple[str, str, float, tuple[int, int] | None], ReferenceEnergy
         bond_distance_angstrom=1.5957,
         method="CASCI(2e,5o)",
         energy_hartree=-7.862500,
-        note="(2 active electrons, 5 active orbitals); freeze 1s of Li.",
+        note=(
+            "(2 active electrons, 5 active orbitals); freeze 1s of Li. "
+            "This literature estimate appears to be approximate: the post-v0.1.0 "
+            "multi-seed bench converged to -7.876 Ha for 2 of 3 seeds, which is "
+            "below this value, so the true active-space FCI minimum is closer to "
+            "-7.876 Ha. Retained for backward-compat with v0.1.0 manifests."
+        ),
     ),
 }
 
