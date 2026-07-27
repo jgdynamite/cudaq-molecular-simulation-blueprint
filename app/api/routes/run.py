@@ -64,6 +64,7 @@ def _make_lih_runner(req: StartRunRequest):  # type: ignore[no-untyped-def]
             max_iterations=req.max_iterations,
             on_iteration=on_iteration,
             run_id=run_id,
+            ansatz_mode=req.ansatz_mode,
         )
 
     return runner

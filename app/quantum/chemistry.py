@@ -18,7 +18,14 @@ if TYPE_CHECKING:  # pragma: no cover
 
 @dataclass(frozen=True, slots=True)
 class Molecule:
-    """Ground-truth molecule specification used by the experiment runners."""
+    """Ground-truth molecule specification used by the experiment runners.
+
+    An active space is defined by *both* ``n_core_orbitals`` and
+    ``n_active_orbitals``. Supplying only one of the two is rejected at
+    construction time rather than silently ignored: before v0.2 a partial
+    specification produced a full-molecule Hamiltonian while still looking
+    like an active-space experiment to the caller.
+    """
 
     name: str
     geometry: tuple[tuple[str, tuple[float, float, float]], ...]
@@ -28,16 +35,50 @@ class Molecule:
     n_core_orbitals: int | None = None
     n_active_orbitals: int | None = None
 
+    def __post_init__(self) -> None:
+        core_set = self.n_core_orbitals is not None
+        active_set = self.n_active_orbitals is not None
+        if core_set != active_set:
+            raise ValueError(
+                "active space is under-specified for molecule "
+                f"{self.name!r}: n_core_orbitals={self.n_core_orbitals!r}, "
+                f"n_active_orbitals={self.n_active_orbitals!r}. "
+                "Supply both values to request an active space, or neither "
+                "to run the full molecule. Supplying only one is ambiguous: "
+                "the Hamiltonian would be built for the full molecule while "
+                "the run would be labelled as active-space."
+            )
+
+    @property
+    def has_active_space(self) -> bool:
+        return self.n_core_orbitals is not None and self.n_active_orbitals is not None
+
 
 @dataclass(slots=True)
 class HamiltonianBundle:
-    """Result of building a molecular Hamiltonian."""
+    """Result of building a molecular Hamiltonian.
+
+    ``n_electrons`` / ``n_orbitals`` / ``n_qubits`` are what CUDA-Q's
+    chemistry module reports for the *full* molecule. When an active space
+    was requested these are **not** the dimensions the Hamiltonian acts on;
+    ``active_electrons`` / ``active_orbitals`` / ``active_qubits`` carry
+    those. Keeping both is what lets a run record the circuit it actually
+    executed alongside the raw chemistry metadata.
+    """
 
     hamiltonian: Any
     n_electrons: int
     n_orbitals: int
     n_qubits: int
     n_terms: int
+    active_electrons: int | None = None
+    active_orbitals: int | None = None
+
+    @property
+    def active_qubits(self) -> int | None:
+        if self.active_orbitals is None:
+            return None
+        return 2 * self.active_orbitals
 
 
 # Standard equilibrium geometries
@@ -180,12 +221,15 @@ def create_hamiltonian(molecule: Molecule) -> HamiltonianBundle:
     geometry_list: list[tuple[str, tuple[float, float, float]]] = list(molecule.geometry)
 
     kwargs: dict[str, Any] = {}
-    if molecule.n_core_orbitals is not None and molecule.n_active_orbitals is not None:
-        ncore = molecule.n_core_orbitals
-        nactive = molecule.n_active_orbitals
-        total_e = _total_electrons(molecule)
-        kwargs["n_active_electrons"] = total_e - 2 * ncore
-        kwargs["n_active_orbitals"] = nactive
+    active_electrons: int | None = None
+    active_orbitals: int | None = None
+    ncore = molecule.n_core_orbitals
+    nactive = molecule.n_active_orbitals
+    if ncore is not None and nactive is not None:
+        active_electrons = _total_electrons(molecule) - 2 * ncore
+        active_orbitals = nactive
+        kwargs["n_active_electrons"] = active_electrons
+        kwargs["n_active_orbitals"] = active_orbitals
 
     prev_cwd = os.getcwd()
     target_cwd = data_dir if data_dir and os.access(data_dir, os.W_OK) else None
@@ -223,4 +267,6 @@ def create_hamiltonian(molecule: Molecule) -> HamiltonianBundle:
         n_orbitals=n_orbitals,
         n_qubits=n_qubits,
         n_terms=n_terms,
+        active_electrons=active_electrons,
+        active_orbitals=active_orbitals,
     )

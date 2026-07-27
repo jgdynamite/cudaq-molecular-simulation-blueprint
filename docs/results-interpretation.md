@@ -56,14 +56,37 @@ quantity to compare.
 
 For LiH the default active space is `(2 active electrons, 5 active
 orbitals)` with the lithium 1s frozen as core. The Hamiltonian itself
-applies the active-space restriction; the **ansatz**, however, is
-currently instantiated against the full LiH molecule (n_qubits=12,
-n_electrons=4, 92 UCCSD parameters), so the multi-seed bench manifests
-record 12-qubit / 92-parameter circuits even for the active-space
-problem. In a tighter v0.2 implementation the ansatz will be restricted
-to match the active space (10 qubits, ~24 parameters); the reference
-energies in `app/quantum/reference_data.py` will be unchanged because
-they are properties of the Hamiltonian, not the ansatz.
+applies the active-space restriction.
+
+Through v0.1 the **ansatz** did not: it was instantiated against the full
+LiH molecule (`n_qubits=12`, `n_electrons=4`, 92 UCCSD parameters), so
+every manifest under `results/akamai-blackwell-multiseed/` records a
+12-qubit / 92-parameter circuit even though the operator spans 10 qubits.
+
+As of v0.2 the ansatz dimensioning is an explicit choice, recorded in each
+manifest as `notes.ansatz_mode`:
+
+| mode | qubits | parameters | notes |
+|------|--------|------------|-------|
+| `matched` (default) | 10 | 24 | circuit spans exactly the active space |
+| `legacy_full` | 12 | 92 | reproduces the v0.1 configuration |
+
+Reference energies in `app/quantum/reference_data.py` are unchanged and
+apply to both modes, because they are properties of the Hamiltonian rather
+than the ansatz. The 12-qubit and 10-qubit runs are therefore scored
+against the same CASCI(2e,5o) number and are directly comparable on
+accuracy.
+
+Which mode a run used is always recoverable: manifests written before v0.2
+have no `ansatz_mode` key at all, and the reporting in
+`app/benchmark/followup.py` places those in their own group rather than
+guessing. It never merges a `legacy_full` group with a `matched` group.
+
+The controlled comparison between the two modes is specified in
+[experiment-methodology.md](experiment-methodology.md#the-ansatzhamiltonian-mismatch-v01).
+**It has not been run yet**, so this repository currently contains no
+measurement of what the matched ansatz does to accuracy, convergence,
+seed stability, or wall time.
 
 The reference table in `app/quantum/reference_data.py` was recomputed
 via PySCF on 2026-05-04 (`pyscf.mcscf.CASCI`) so chemical accuracy is
@@ -77,11 +100,15 @@ The 2026-05-04 multi-seed bench reflects this. With 1500 COBYLA
 iterations, two of three seeds (42, 43) converge to within 1.1 mHa of
 each other but stop ~5.8&ndash;6.9 mHa above CASCI(2e,5o); the third
 seed (44) lands ~126 mHa above in a separate basin. None of these
-runs reach chemical accuracy. The path to closing the gap is a
-combination of (a) a properly active-space-restricted ansatz,
-(b) gradient-based optimization (parameter-shift L-BFGS-B), and
-(c) running longer. None of those is a vendor problem; they are
-engineering choices the project will revisit in a follow-up post.
+runs reach chemical accuracy.
+
+Those runs all used the `legacy_full` ansatz, so their 92-parameter search
+space is one candidate explanation among several. The others are
+gradient-based optimization (parameter-shift L-BFGS-B) and simply running
+longer. Ranking them requires the controlled experiment described in
+[experiment-methodology.md](experiment-methodology.md#the-ansatzhamiltonian-mismatch-v01);
+until it runs, the cause is unestablished. None of these are vendor
+problems; they are engineering choices the project will revisit.
 
 ## Sample size and noise
 

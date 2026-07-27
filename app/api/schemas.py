@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.storage.manifests import BackendIdentifier, Molecule, RunStatus
+from app.storage.manifests import AnsatzMode, BackendIdentifier, Molecule, RunStatus
 
 
 class HealthResponse(BaseModel):
@@ -30,6 +30,9 @@ class StartRunRequest(BaseModel):
     seed: int = 42
     n_core_orbitals: int | None = 1
     n_active_orbitals: int | None = 5
+    # Only consulted for molecules with an active space (LiH). H2 resolves
+    # identically under both modes.
+    ansatz_mode: AnsatzMode = AnsatzMode.MATCHED
 
 
 class StartRunResponse(BaseModel):

@@ -50,3 +50,26 @@ def test_bench_run_suite_help_documents_seed_and_iterations() -> None:
     assert "--seeds" in result.output
     assert "--lih-max-iterations" in result.output
     assert "--skip-gpu" in result.output
+
+
+def test_run_lih_help_documents_ansatz_mode() -> None:
+    result = runner.invoke(app, ["run", "lih", "--help"], env=WIDE_ENV)
+    assert result.exit_code == 0
+    assert "--ansatz-mode" in result.output
+    assert "matched" in result.output
+    assert "legacy_full" in result.output
+
+
+def test_run_lih_rejects_unknown_ansatz_mode() -> None:
+    result = runner.invoke(app, ["run", "lih", "--ansatz-mode", "bogus"], env=WIDE_ENV)
+    assert result.exit_code != 0
+    assert "unknown ansatz mode" in result.output
+
+
+def test_bench_followup_help_documents_required_options() -> None:
+    result = runner.invoke(app, ["bench", "run-lih-active-space-followup", "--help"], env=WIDE_ENV)
+    assert result.exit_code == 0
+    assert "--seeds" in result.output
+    assert "--max-iterations" in result.output
+    assert "--output-dir" in result.output
+    assert "lih-active-space-followup-v02" in result.output

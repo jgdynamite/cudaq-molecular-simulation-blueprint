@@ -31,6 +31,43 @@ class Molecule(StrEnum):
     LIH = "lih"
 
 
+class AnsatzMode(StrEnum):
+    """How the UCCSD ansatz dimensions are derived when an active space is used.
+
+    ``MATCHED``
+        Build the ansatz from the *active-space* dimensions, so the circuit
+        acts on exactly the orbitals the Hamiltonian was restricted to. For
+        the default LiH (2 electron, 5 orbital) active space this is a
+        10-qubit / 2-electron ansatz.
+
+    ``LEGACY_FULL``
+        Reproduce the pre-v0.2 behavior: build the ansatz from the
+        full-molecule dimensions reported by CUDA-Q's chemistry module even
+        when the Hamiltonian carries an active-space restriction. For LiH
+        this is a 12-qubit / 4-electron ansatz. Retained so the v0.1
+        published numbers stay reproducible and so the two arms can be
+        compared under otherwise identical conditions.
+
+    Molecules without an active space (H2) resolve identically under both
+    modes, because the active-space dimensions *are* the full dimensions.
+    """
+
+    MATCHED = "matched"
+    LEGACY_FULL = "legacy_full"
+
+
+#: ``experiment_variant`` labels recorded in LiH manifest notes. These are
+#: part of the persisted schema: reporting groups on them and must never
+#: merge two different variants into one aggregate.
+EXPERIMENT_VARIANT_LEGACY_FULL = "lih_active_hamiltonian_legacy_full_ansatz_v01"
+EXPERIMENT_VARIANT_MATCHED = "lih_active_space_matched_ansatz_v02"
+
+LIH_EXPERIMENT_VARIANT_BY_MODE: dict[AnsatzMode, str] = {
+    AnsatzMode.LEGACY_FULL: EXPERIMENT_VARIANT_LEGACY_FULL,
+    AnsatzMode.MATCHED: EXPERIMENT_VARIANT_MATCHED,
+}
+
+
 class RunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"

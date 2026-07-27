@@ -6,6 +6,8 @@ funneled through this module. ``Settings`` is the single source of truth.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import Field
@@ -58,3 +60,23 @@ def get_settings() -> Settings:
         _settings = Settings()
         _settings.results_dir.mkdir(parents=True, exist_ok=True)
     return _settings
+
+
+@contextmanager
+def results_dir_override(path: Path | str) -> Iterator[Path]:
+    """Temporarily point ``results_dir`` somewhere else.
+
+    Used by benchmark suites that keep their runs in a dedicated
+    subdirectory so a sweep can be summarized and archived on its own
+    without picking up unrelated runs. Restores the previous value on exit,
+    including when the body raises.
+    """
+    settings = get_settings()
+    previous = settings.results_dir
+    resolved = Path(path).expanduser().resolve()
+    resolved.mkdir(parents=True, exist_ok=True)
+    settings.results_dir = resolved
+    try:
+        yield resolved
+    finally:
+        settings.results_dir = previous

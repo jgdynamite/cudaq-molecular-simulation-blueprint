@@ -7,6 +7,8 @@ Subcommands:
 - ``results list``     List previous runs.
 - ``results show <id>`` Print a manifest.
 - ``bench run-suite``  Run the full multi-seed benchmark suite.
+- ``bench run-lih-active-space-followup``
+                  Run the LiH matched-vs-legacy ansatz follow-up.
 - ``bench compare``    Generate a CPU vs GPU comparison report.
 - ``info``        Print system + GPU detection summary.
 """
@@ -14,6 +16,7 @@ Subcommands:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -30,7 +33,7 @@ from app.storage.filesystem import (
     save_manifest,
     save_trace,
 )
-from app.storage.manifests import BackendIdentifier
+from app.storage.manifests import AnsatzMode, BackendIdentifier
 
 app = typer.Typer(
     add_completion=False,
@@ -48,6 +51,10 @@ app.add_typer(bench_app, name="bench")
 console = Console()
 log = get_logger("cli")
 
+#: Default sub-directory (inside the configured results directory) for the
+#: LiH active-space ansatz follow-up sweep.
+DEFAULT_FOLLOWUP_OUTPUT_DIR = "lih-active-space-followup-v02"
+
 
 def _parse_backend(value: str) -> BackendIdentifier:
     aliases = {
@@ -63,6 +70,15 @@ def _parse_backend(value: str) -> BackendIdentifier:
     if key not in aliases:
         raise typer.BadParameter(f"unknown backend '{value}'. Valid: {', '.join(aliases)}")
     return aliases[key]
+
+
+def _parse_ansatz_mode(value: str) -> AnsatzMode:
+    key = value.strip().lower()
+    try:
+        return AnsatzMode(key)
+    except ValueError:
+        valid = ", ".join(m.value for m in AnsatzMode)
+        raise typer.BadParameter(f"unknown ansatz mode '{value}'. Valid: {valid}") from None
 
 
 def _summarize(manifest, trace) -> None:  # type: ignore[no-untyped-def]
@@ -143,14 +159,23 @@ def run_lih_cmd(
     ),
     seed: int = typer.Option(42, "--seed"),
     max_iterations: int = typer.Option(500, "--max-iterations"),
+    ansatz_mode: str = typer.Option(
+        AnsatzMode.MATCHED.value,
+        "--ansatz-mode",
+        help=(
+            "matched = build UCCSD for the active space (10 qubits for default LiH); "
+            "legacy_full = build it for the full molecule (12 qubits), reproducing v0.1."
+        ),
+    ),
 ) -> None:
     """Run the LiH VQE experiment."""
     from app.quantum.lih_vqe import run_lih  # imported lazily
 
     backend_id = _parse_backend(backend)
+    mode = _parse_ansatz_mode(ansatz_mode)
     core = n_core_orbitals if (n_core_orbitals and n_core_orbitals > 0) else None
     active = n_active_orbitals if (n_active_orbitals and n_active_orbitals > 0) else None
-    log.info("lih_run.start", backend=backend_id.value, seed=seed)
+    log.info("lih_run.start", backend=backend_id.value, seed=seed, ansatz_mode=mode.value)
     manifest, trace = run_lih(
         backend_id=backend_id,
         bond_distance=bond_distance,
@@ -158,6 +183,7 @@ def run_lih_cmd(
         n_active_orbitals=active,
         seed=seed,
         max_iterations=max_iterations,
+        ansatz_mode=mode,
     )
     save_manifest(manifest)
     save_trace(trace)
@@ -266,6 +292,96 @@ def bench_run_suite(
             m.molecule.name.value, m.backend.value, str(m.seed), m.status.value, e, it, wt
         )
     console.print(table)
+
+
+@bench_app.command("run-lih-active-space-followup")
+def bench_run_lih_active_space_followup(
+    seeds: str = typer.Option(
+        "42,43,44,45,46",
+        "--seeds",
+        help="Comma-separated seed list.",
+    ),
+    max_iterations: int = typer.Option(
+        1500,
+        "--max-iterations",
+        help="COBYLA max iterations, applied identically to all three arms.",
+    ),
+    output_dir: str = typer.Option(
+        DEFAULT_FOLLOWUP_OUTPUT_DIR,
+        "--output-dir",
+        help=(
+            "Directory for this sweep's runs and reports. Relative paths are "
+            "resolved inside the configured results directory."
+        ),
+    ),
+) -> None:
+    """Run the LiH active-space ansatz follow-up experiment.
+
+    Three arms at a fixed iteration budget: legacy_full on GPU FP64, matched
+    on GPU FP64, and matched on CPU. Arms run contiguously so CPU and GPU
+    work is never interleaved. Writes SUMMARY.csv and comparison.json into
+    the output directory when the sweep finishes.
+
+    This is a long sweep. With five seeds it is 15 LiH runs at up to 1500
+    COBYLA iterations each; budget accordingly before starting a GPU VM.
+    """
+    from app.benchmark.followup import generate_reports
+    from app.benchmark.runner import lih_active_space_followup_suite, run_benchmark_suite
+    from app.core.config import get_settings, results_dir_override
+
+    seed_tuple = tuple(int(s.strip()) for s in seeds.split(",") if s.strip())
+    if not seed_tuple:
+        raise typer.BadParameter("--seeds must contain at least one integer")
+
+    target = Path(output_dir)
+    if not target.is_absolute():
+        target = get_settings().results_dir / target
+
+    suite = lih_active_space_followup_suite(seeds=seed_tuple, max_iterations=max_iterations)
+
+    console.print(
+        Panel.fit(
+            f"Running {len(suite)} LiH specs across {len(seed_tuple)} seed(s).\n"
+            f"  seeds:          {seed_tuple}\n"
+            f"  max_iterations: {max_iterations}\n"
+            f"  arms:           legacy_full/gpu_fp64, matched/gpu_fp64, matched/cpu\n"
+            f"  output_dir:     {target}",
+            title="bench run-lih-active-space-followup",
+            border_style="cyan",
+        )
+    )
+
+    with results_dir_override(target):
+        manifests = run_benchmark_suite(suite)
+        csv_path, json_path = generate_reports(target, manifests)
+
+    console.print(f"\n[green]Done.[/green] Persisted {len(manifests)} runs to {target}")
+
+    table = Table(title="Follow-up suite summary")
+    table.add_column("variant")
+    table.add_column("backend")
+    table.add_column("seed", justify="right")
+    table.add_column("qubits", justify="right")
+    table.add_column("params", justify="right")
+    table.add_column("status")
+    table.add_column("energy", justify="right")
+    table.add_column("wall (s)", justify="right")
+    for m in manifests:
+        e = f"{m.result.energy:.6f}" if m.result else "-"
+        wt = f"{m.result.wall_time_seconds:.2f}" if m.result else "-"
+        table.add_row(
+            str(m.notes.get("ansatz_mode", "-")),
+            m.backend.value,
+            str(m.seed),
+            str(m.qubit_count),
+            str(m.parameter_count),
+            m.status.value,
+            e,
+            wt,
+        )
+    console.print(table)
+    console.print(f"[green]Wrote[/green] {csv_path}")
+    console.print(f"[green]Wrote[/green] {json_path}")
 
 
 @bench_app.command("compare")
