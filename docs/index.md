@@ -47,7 +47,6 @@ for the full discussion.
 - [Akamai deployment](akamai-deployment.md) - Terraform + Ansible walkthrough
 - [Results interpretation](results-interpretation.md) - what the bench numbers do and don't say
 - [Scope and non-goals](scope-and-non-goals.md) - explicit guardrails for v1
-- [Blog support notes](blog-support-notes.md) - notes for the companion blog post
 
 ## Quick start
 

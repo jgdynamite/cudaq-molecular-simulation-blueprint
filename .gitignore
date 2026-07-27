@@ -1,3 +1,6 @@
+# Private planning files
+docs/plan/
+
 # Python
 __pycache__/
 *.py[cod]
