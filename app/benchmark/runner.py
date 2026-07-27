@@ -17,6 +17,7 @@ from app.quantum.h2_vqe import run_h2
 from app.quantum.lih_vqe import run_lih
 from app.storage.filesystem import save_manifest, save_trace
 from app.storage.manifests import (
+    AnsatzMode,
     BackendIdentifier,
     IterationRecord,
     IterationTrace,
@@ -30,7 +31,12 @@ log = get_logger("benchmark")
 
 @dataclass(slots=True)
 class BenchmarkSpec:
-    """One row of the benchmark suite."""
+    """One row of the benchmark suite.
+
+    ``ansatz_mode`` is only meaningful for experiments with an active space
+    (LiH). It is ignored for H2, which has no active space and therefore
+    resolves to the same 4-qubit / 3-parameter circuit either way.
+    """
 
     experiment: ExperimentName
     backend: BackendIdentifier
@@ -38,6 +44,7 @@ class BenchmarkSpec:
     max_iterations: int = 200
     bond_distance: float | None = None
     label: str | None = None
+    ansatz_mode: AnsatzMode = AnsatzMode.MATCHED
 
 
 def run_one(
@@ -45,18 +52,23 @@ def run_one(
     on_iteration: Callable[[IterationRecord], None] | None = None,
 ) -> tuple[RunManifest, IterationTrace]:
     """Execute a single benchmark configuration."""
-    common_kwargs = {
-        "backend_id": spec.backend,
-        "seed": spec.seed,
-        "max_iterations": spec.max_iterations,
-        "on_iteration": on_iteration,
-    }
     if spec.experiment == "h2":
-        bond = spec.bond_distance if spec.bond_distance is not None else 0.7414
-        return run_h2(bond_distance=bond, **common_kwargs)
+        return run_h2(
+            backend_id=spec.backend,
+            bond_distance=spec.bond_distance if spec.bond_distance is not None else 0.7414,
+            seed=spec.seed,
+            max_iterations=spec.max_iterations,
+            on_iteration=on_iteration,
+        )
     if spec.experiment == "lih":
-        bond = spec.bond_distance if spec.bond_distance is not None else 1.5957
-        return run_lih(bond_distance=bond, **common_kwargs)
+        return run_lih(
+            backend_id=spec.backend,
+            bond_distance=spec.bond_distance if spec.bond_distance is not None else 1.5957,
+            seed=spec.seed,
+            max_iterations=spec.max_iterations,
+            on_iteration=on_iteration,
+            ansatz_mode=spec.ansatz_mode,
+        )
     raise ValueError(f"unknown experiment: {spec.experiment}")
 
 
@@ -88,6 +100,52 @@ def run_benchmark_suite(
             wall_time=manifest.result.wall_time_seconds if manifest.result else None,
         )
     return manifests
+
+
+def lih_active_space_followup_suite(
+    seeds: tuple[int, ...] = (42, 43, 44, 45, 46),
+    *,
+    max_iterations: int = 1500,
+) -> list[BenchmarkSpec]:
+    """Controlled follow-up comparing the legacy and matched LiH ansatz.
+
+    Three arms, all LiH, all at the same iteration budget so the only thing
+    that varies within a backend is the ansatz dimensioning:
+
+    1. ``legacy_full`` on ``gpu_fp64`` - reproduces the v0.1 configuration
+       (12-qubit / 92-parameter circuit against the active-space Hamiltonian).
+    2. ``matched`` on ``gpu_fp64`` - the hypothesis arm (10-qubit /
+       24-parameter circuit against the same Hamiltonian).
+    3. ``matched`` on ``cpu`` - the CPU counterpart of arm 2, which gives
+       both a CPU/GPU wall-time ratio for the matched ansatz and a numerical
+       cross-check that the two backends agree seed-for-seed.
+
+    Arms are emitted contiguously (all of arm 1, then all of arm 2, then all
+    of arm 3) so the runner never interleaves CPU and GPU work.
+
+    H2 and GPU FP32 are deliberately excluded: H2 has no active space so the
+    ansatz mode cannot change anything, and FP32 would confound a precision
+    difference with the ansatz difference under test.
+    """
+    arms: list[tuple[AnsatzMode, BackendIdentifier]] = [
+        (AnsatzMode.LEGACY_FULL, BackendIdentifier.GPU_FP64),
+        (AnsatzMode.MATCHED, BackendIdentifier.GPU_FP64),
+        (AnsatzMode.MATCHED, BackendIdentifier.CPU),
+    ]
+    suite: list[BenchmarkSpec] = []
+    for mode, backend in arms:
+        for seed in seeds:
+            suite.append(
+                BenchmarkSpec(
+                    experiment="lih",
+                    backend=backend,
+                    seed=seed,
+                    max_iterations=max_iterations,
+                    ansatz_mode=mode,
+                    label=f"lih/{mode.value}/{backend.value}/seed{seed}",
+                )
+            )
+    return suite
 
 
 def default_blog_suite(

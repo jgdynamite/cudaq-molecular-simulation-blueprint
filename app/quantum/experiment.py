@@ -15,7 +15,7 @@ import numpy as np
 
 from app.core.metadata import project_version
 from app.core.system_info import collect_system_info
-from app.quantum.ansatz import make_uccsd_kernel
+from app.quantum.ansatz import make_uccsd_kernel, resolve_ansatz_dimensions
 from app.quantum.backends import select_backend
 from app.quantum.chemistry import Molecule, create_hamiltonian
 from app.quantum.optimizers import TracingCost, run_cobyla
@@ -25,6 +25,7 @@ from app.quantum.reference_data import (
 )
 from app.storage.filesystem import new_run_id
 from app.storage.manifests import (
+    AnsatzMode,
     BackendIdentifier,
     IterationRecord,
     IterationTrace,
@@ -66,6 +67,7 @@ def run_vqe(
     on_iteration: Callable[[IterationRecord], None] | None = None,
     notes: dict[str, object] | None = None,
     run_id: str | None = None,
+    ansatz_mode: AnsatzMode = AnsatzMode.MATCHED,
 ) -> tuple[RunManifest, IterationTrace]:
     """Execute one VQE run end-to-end.
 
@@ -75,12 +77,18 @@ def run_vqe(
 
     Pass ``run_id`` to override the auto-generated identifier; the API uses
     this to allocate the id up front and return it to the client immediately.
+
+    ``ansatz_mode`` selects whether the UCCSD ansatz is built for the
+    active-space dimensions (``MATCHED``) or the full-molecule dimensions
+    (``LEGACY_FULL``). It only has an effect when the molecule defines an
+    active space; see :func:`app.quantum.ansatz.resolve_ansatz_dimensions`.
     """
 
     run_id = run_id or new_run_id()
     config = select_backend(backend_id)
     bundle = create_hamiltonian(molecule)
-    ansatz = make_uccsd_kernel(bundle.n_qubits, bundle.n_electrons)
+    dims = resolve_ansatz_dimensions(bundle, ansatz_mode)
+    ansatz = make_uccsd_kernel(dims.qubit_count, dims.electron_count)
 
     rng = np.random.default_rng(seed)
     if initial_parameters is None:
@@ -135,16 +143,34 @@ def run_vqe(
             active_orbitals=active_o,
         ),
         optimizer=optimizer_spec,
-        qubit_count=bundle.n_qubits,
+        # These describe the circuit that was actually executed, which under
+        # MATCHED is the active-space circuit rather than the full molecule.
+        qubit_count=ansatz.qubit_count,
         parameter_count=ansatz.parameter_count,
         system_info=collect_system_info().to_dict(),
         notes={
             **(notes or {}),
             "hamiltonian_terms": bundle.n_terms,
+            # Retained under their original keys for backward compatibility
+            # with v0.1 manifests: these are the raw chemistry-reported
+            # full-molecule numbers, NOT necessarily the executed circuit.
             "n_electrons": bundle.n_electrons,
             "n_orbitals": bundle.n_orbitals,
             "bond_distance_angstrom": bond_distance,
             "reference": asdict(reference) if reference else None,
+            # v0.2 ansatz provenance. Explicit rather than derived so an
+            # old manifest (which lacks these keys) is never mistaken for a
+            # matched-ansatz run.
+            "ansatz_name": "uccsd",
+            "ansatz_mode": ansatz_mode.value,
+            "ansatz_electron_count": ansatz.electron_count,
+            "ansatz_orbital_count": dims.orbital_count,
+            "ansatz_qubit_count": ansatz.qubit_count,
+            "ansatz_parameter_count": ansatz.parameter_count,
+            "chemistry_reported_electron_count": bundle.n_electrons,
+            "chemistry_reported_orbital_count": bundle.n_orbitals,
+            "active_electron_count": bundle.active_electrons,
+            "active_orbital_count": bundle.active_orbitals,
         },
     )
 

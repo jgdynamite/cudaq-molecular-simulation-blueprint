@@ -12,17 +12,14 @@ unsupportable claims:
   and precision. H2 is the smoke test that proves the pipeline is correct
   end-to-end.
 - **LiH / STO-3G** with the default (2 electron / 5 orbital) active space.
-  In theory the active space corresponds to a 10-qubit / ~24-parameter
-  problem, but the current LiH ansatz is instantiated against the full
-  molecule (n_qubits=12, n_electrons=4) before the active-space
-  Hamiltonian is applied, so the actual circuit recorded in every multi-seed
-  manifest is **12 qubits / 92 UCCSD parameters**. Closing that gap (a
-  properly active-space-restricted ansatz of 10 qubits / ~24 parameters) is
-  on the v0.2 follow-up list. The CPU statevector simulator is noticeably
-  slower than the GPU here: CPU runs take ~30 minutes per seed (1500
-  iterations of COBYLA), GPU FP64 runs take ~18 minutes. The CPU baseline
-  remains feasible &mdash; you can leave it running over a coffee &mdash;
-  but it is now long enough to expose meaningful GPU wall-time savings
+  Through v0.1 the ansatz was instantiated against the full molecule while
+  the Hamiltonian carried the active-space restriction; see
+  [the ansatz/Hamiltonian mismatch](#the-ansatzhamiltonian-mismatch-v01)
+  below. The CPU statevector simulator is noticeably slower than the GPU
+  here: in the v0.1 configuration CPU runs took ~30 minutes per seed (1500
+  iterations of COBYLA) and GPU FP64 runs took ~18 minutes. The CPU
+  baseline remains feasible &mdash; you can leave it running over a coffee
+  &mdash; but it is long enough to expose meaningful GPU wall-time savings
   rather than being a sub-second curiosity.
 
 We deliberately do **not** include molecules where CPU simulation becomes
@@ -37,6 +34,8 @@ this project is for.
 | basis set           | STO-3G                                 | minimal, reproducible across QC papers              |
 | Hamiltonian builder | `cudaq.chemistry.create_molecular_hamiltonian` | first-class CUDA-Q API; uses OpenFermion under the hood |
 | ansatz              | UCCSD via `cudaq.kernels.uccsd`        | physically motivated for chemistry                  |
+| ansatz dimensioning | `--ansatz-mode matched` (default) or `legacy_full` | `matched` builds the circuit for the active space; `legacy_full` reproduces v0.1. See [the mismatch](#the-ansatzhamiltonian-mismatch-v01) |
+| parameter count     | `cudaq.kernels.uccsd_num_parameters()` | queried from CUDA-Q, never hard-coded               |
 | reference state     | Hartree-Fock                           | standard initial state                              |
 | optimizer           | COBYLA (SciPy)                         | gradient-free, exposes a real per-eval trace        |
 | convergence test    | `\|E_VQE - E_FCI\| < 1.6e-3 Ha`         | chemical accuracy threshold                         |
@@ -89,6 +88,104 @@ residual rather than active-space frozen-core error.
 
 If a user picks an unusual geometry, the reference is `None` and only the
 absolute energy is reported (no error column).
+
+## The ansatz/Hamiltonian mismatch (v0.1)
+
+The LiH Hamiltonian is built with one frozen core orbital and five active
+spatial orbitals, i.e. **2 active electrons in 5 active orbitals**, which
+under Jordan-Wigner is a **10-qubit** operator.
+
+The v0.1 VQE driver did not use those dimensions. It built the UCCSD ansatz
+from the full-molecule metadata that `cudaq.chemistry.create_molecular_hamiltonian`
+reports (`n_electrons=4`, `n_orbitals=6`), producing a **12-qubit,
+92-parameter** circuit. Every LiH manifest under
+`results/akamai-blackwell-multiseed/` records those numbers.
+
+So the circuit and the operator described different orbital sets. The runs
+still executed &mdash; the two extra qubits are simply never acted on by the
+Hamiltonian &mdash; but the ansatz carried 92 variational parameters and a
+Hartree-Fock reference for 4 electrons to describe a 2-electron problem.
+
+Parameter counts are not hard-coded anywhere; they come from
+`cudaq.kernels.uccsd_num_parameters(electron_count, qubit_count)`. For
+CUDA-Q 0.14 that function returns 92 for `(4, 12)` and 24 for `(2, 10)`,
+which is where both figures above come from.
+
+### Hypothesis
+
+Restricting the ansatz to the active space should change the optimization
+problem COBYLA is given: the same Hamiltonian, but a 24-parameter search
+space instead of a 92-parameter one, with a Hartree-Fock reference matching
+the active electron count.
+
+Whether that changes accuracy, convergence behaviour, seed-to-seed
+stability, or wall time is **an open question that this repository has not
+yet measured**. The experiment below exists to answer it. Nothing in the
+committed results speaks to it.
+
+### Controlled experiment design
+
+`cudaq-bp bench run-lih-active-space-followup` runs three arms over five
+seeds (42-46), 15 runs total, every run at the same 1500-iteration COBYLA
+budget:
+
+| arm | ansatz mode | backend | qubits | parameters |
+|-----|-------------|---------|--------|------------|
+| 1   | `legacy_full` | `gpu_fp64` | 12 | 92 |
+| 2   | `matched`     | `gpu_fp64` | 10 | 24 |
+| 3   | `matched`     | `cpu`      | 10 | 24 |
+
+Arms 1 and 2 differ **only** in ansatz dimensioning, which is the variable
+under test. Arm 3 is the CPU counterpart of arm 2: it supplies a CPU/GPU
+wall-time ratio for the matched ansatz, and a numerical cross-check that
+the two backends agree seed-for-seed (final energies within 1e-8 Ha).
+Disagreements above that tolerance are reported, not discarded.
+
+Held constant across all three arms: geometry, basis, active-space
+definition, CASCI(2e,5o) reference, the 1.6 mHa chemical-accuracy
+threshold, COBYLA and its tolerance, the parameter-initialization
+distribution, and the bond distance.
+
+H2 is excluded because it has no active space, so the ansatz mode cannot
+change anything about it. GPU FP32 is excluded because a precision
+difference would confound the ansatz difference under test.
+
+Arms run contiguously rather than interleaved, so CPU and GPU work never
+overlap on the same host.
+
+### Running it
+
+```bash
+# Defaults: seeds 42-46, 1500 iterations, output to
+# <results_dir>/lih-active-space-followup-v02/
+cudaq-bp bench run-lih-active-space-followup
+
+# Or override any of them
+cudaq-bp bench run-lih-active-space-followup \
+  --seeds 42,43,44,45,46 \
+  --max-iterations 1500 \
+  --output-dir lih-active-space-followup-v02
+```
+
+This is a long sweep &mdash; 15 LiH runs at up to 1500 iterations each
+&mdash; so budget GPU time before starting. On completion it writes
+`SUMMARY.csv` (one row per run) and `comparison.json` into the output
+directory.
+
+`comparison.json` groups on `(experiment_variant, ansatz_mode, backend)`
+and never merges the `legacy_full` and `matched` arms into a shared
+aggregate. Cross-arm relationships appear only as explicit ratios and
+paired per-seed differences.
+
+Single runs can select the mode directly:
+
+```bash
+cudaq-bp run lih --backend gpu_fp64 --ansatz-mode matched      # default
+cudaq-bp run lih --backend gpu_fp64 --ansatz-mode legacy_full  # v0.1 behavior
+```
+
+`matched` is the default for new LiH runs. The published v0.1 numbers were
+produced under `legacy_full`, which is retained so they stay reproducible.
 
 ## Running the canonical suite
 
