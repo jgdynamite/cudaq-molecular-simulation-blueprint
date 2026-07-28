@@ -23,11 +23,11 @@ bench plus all 15 LiH runs from the 2026-07-27 ansatz follow-up. The
 "Run an experiment" form is intentionally inert in static mode &mdash;
 clone the repo to run live.
 
-This project is the reference implementation behind the article
-**"Quantum Computing: What Every CIO Should Understand Before
-Investing."** It exists to make the hybrid quantum workflow concrete,
-runnable, and reproducible &mdash; and to let any claim in that article
-be checked against the underlying manifests.
+This project is the reference implementation behind a forthcoming
+technical article on evaluating hybrid quantum-classical workloads. It
+exists to make the hybrid quantum workflow concrete, runnable, and
+reproducible &mdash; and to let any claim in that article be checked
+against the underlying manifests.
 
 It is **not** a quantum-advantage claim, **not** a positioning of Akamai as
 a dedicated quantum cloud, and **not** a cross-cloud benchmark. It **is** a

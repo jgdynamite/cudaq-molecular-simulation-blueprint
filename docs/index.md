@@ -6,9 +6,9 @@
 
 This site is the long-form companion to the
 [GitHub repository](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint).
-It is the reference implementation behind the article **"Quantum
-Computing: What Every CIO Should Understand Before Investing"**, making
-the hybrid quantum workflow concrete, runnable, and reproducible.
+It is the reference implementation behind a forthcoming technical article
+on evaluating hybrid quantum-classical workloads, making the hybrid
+quantum workflow concrete, runnable, and reproducible.
 
 ## Validated on Blackwell (Jakarta, multi-seed re-bench 2026-05-04)
 
