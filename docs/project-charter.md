@@ -17,8 +17,6 @@ This project exists to support a technical article titled:
 
 > "Quantum Computing: What Every CIO Should Understand Before Investing."
 
-Published at cloudportabletech.com.
-
 (Working title through the May 2026 bench cycle: "Why GPUs Matter to
 Quantum Before QPUs Do." The scope below is unchanged; the framing moved
 from a GPU-performance argument to an investment-discipline argument

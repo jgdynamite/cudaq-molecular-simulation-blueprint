@@ -25,11 +25,9 @@ clone the repo to run live.
 
 This project is the reference implementation behind the article
 **"Quantum Computing: What Every CIO Should Understand Before
-Investing,"** published at
-[cloudportabletech.com](https://cloudportabletech.com). It exists to make
-the hybrid quantum workflow concrete, runnable, and reproducible &mdash;
-and to let any claim in that article be checked against the underlying
-manifests.
+Investing."** It exists to make the hybrid quantum workflow concrete,
+runnable, and reproducible &mdash; and to let any claim in that article
+be checked against the underlying manifests.
 
 It is **not** a quantum-advantage claim, **not** a positioning of Akamai as
 a dedicated quantum cloud, and **not** a cross-cloud benchmark. It **is** a
