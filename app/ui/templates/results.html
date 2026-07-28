@@ -18,6 +18,7 @@
           <tr>
             <th class="px-4 py-3 text-left">run id</th>
             <th class="px-4 py-3 text-left">molecule</th>
+            <th class="px-4 py-3 text-left">circuit</th>
             <th class="px-4 py-3 text-left">backend</th>
             <th class="px-4 py-3 text-right">energy [Ha]</th>
             <th class="px-4 py-3 text-right">iters</th>
@@ -32,6 +33,13 @@
           <tr class="hover:bg-slate-800/60">
             <td class="px-4 py-3"><a class="font-mono text-brand-400 hover:underline" href="/results/{{ m.run_id }}">{{ m.run_id }}</a></td>
             <td class="px-4 py-3">{{ m.molecule.name.value | upper }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <span class="font-mono text-xs text-slate-400">{{ m.qubit_count }}q / {{ m.parameter_count }}p</span>
+              {% set mode = m.notes.get("ansatz_mode") if m.notes else None %}
+              {% if mode %}
+              <span class="ml-1 rounded px-1.5 py-0.5 font-mono text-[10px] {{ 'bg-emerald-500/15 text-emerald-300' if mode == 'matched' else 'bg-amber-500/15 text-amber-300' }}">{{ mode }}</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3"><span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-xs">{{ m.target_string }}</span></td>
             <td class="px-4 py-3 text-right font-mono">{{ "%.6f"|format(r.energy) if r else "-" }}</td>
             <td class="px-4 py-3 text-right font-mono">{{ r.iterations if r else "-" }}</td>

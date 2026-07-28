@@ -3,8 +3,8 @@
 The live UI is a server-rendered FastAPI app with HTMX/SSE for interactive
 runs. For the public blog companion we want a static snapshot that:
 
-* shows the **real** Jakarta benchmark data (4 manifests + traces +
-  cpu_vs_gpu.json) without any Python/cudaq runtime;
+* shows the **real** Blackwell benchmark data (manifests + traces +
+  comparison report) without any Python/cudaq runtime;
 * preserves layout fidelity but disables the run form and SSE plumbing
   with a clear "static demo, see GitHub for live runs" banner;
 * lays files out as ``<page>/index.html`` so Akamai Object Storage's
@@ -12,9 +12,8 @@ runs. For the public blog companion we want a static snapshot that:
 
 Usage::
 
-    python -m app.ui.static_export \
-        --results-dir results/akamai-jakarta \
-        --output-dir _site
+    python scripts/build_demo_dataset.py    # assembles results/demo-combined
+    python -m app.ui.static_export --output-dir _site
 
 The script imports the same Jinja2 templates the live server uses; the only
 template additions for static mode are guarded by ``{% if static_mode %}``,
@@ -38,7 +37,7 @@ from typing import Any
 class StaticExportConfig:
     results_dir: Path
     output_dir: Path
-    deployment_date: str = "2026-05-03"
+    deployment_date: str = "2026-07-27"
 
 
 def _configure_results_dir(results_dir: Path) -> None:
@@ -226,8 +225,11 @@ def _parse_args(argv: list[str]) -> StaticExportConfig:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path("results/akamai-jakarta"),
-        help="Directory containing the run manifests + traces to embed.",
+        default=Path("results/demo-combined"),
+        help=(
+            "Directory containing the run manifests + traces to embed. "
+            "Build it with scripts/build_demo_dataset.py."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -237,7 +239,7 @@ def _parse_args(argv: list[str]) -> StaticExportConfig:
     )
     parser.add_argument(
         "--deployment-date",
-        default="2026-05-03",
+        default="2026-07-27",
         help="Date string surfaced in the static-mode banner.",
     )
     args = parser.parse_args(argv)

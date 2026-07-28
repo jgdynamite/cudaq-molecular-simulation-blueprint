@@ -5,7 +5,28 @@
   <div>
     <a href="/results" class="text-sm text-slate-400 hover:text-white">&larr; back to results</a>
     <h1 class="mt-2 text-2xl font-semibold font-mono">{{ manifest.run_id }}</h1>
-    <p class="text-slate-400 text-sm">{{ manifest.molecule.name.value | upper }} &middot; {{ manifest.target_string }} &middot; {{ manifest.qubit_count }} qubits &middot; {{ manifest.parameter_count }} parameters</p>
+    <p class="text-slate-400 text-sm">
+      {{ manifest.molecule.name.value | upper }} &middot; {{ manifest.target_string }} &middot; {{ manifest.qubit_count }} qubits &middot; {{ manifest.parameter_count }} parameters
+      {% set mode = manifest.notes.get("ansatz_mode") if manifest.notes else None %}
+      {% if mode %}
+      &middot;
+      <span class="rounded px-1.5 py-0.5 font-mono text-xs {{ 'bg-emerald-500/15 text-emerald-300' if mode == 'matched' else 'bg-amber-500/15 text-amber-300' }}">ansatz: {{ mode }}</span>
+      {% endif %}
+    </p>
+    {% set mode = manifest.notes.get("ansatz_mode") if manifest.notes else None %}
+    {% if mode %}
+    <p class="mt-2 text-xs text-slate-500 max-w-3xl">
+      {% if mode == "matched" %}
+      The UCCSD circuit spans exactly the (2e, 5o) active space the Hamiltonian
+      lives on. With 2 active electrons, singles and doubles already cover the
+      full CI space, so this parameterization is equivalent to FCI here.
+      {% else %}
+      The UCCSD circuit was dimensioned from full-molecule metadata rather than
+      the active space, so it carries more qubits and parameters than the
+      Hamiltonian requires. This reproduces the v0.1 configuration.
+      {% endif %}
+    </p>
+    {% endif %}
   </div>
 
   {% if manifest.result %}

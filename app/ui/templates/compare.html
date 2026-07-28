@@ -6,7 +6,14 @@
     <h1 class="text-2xl font-semibold">CPU vs GPU comparison</h1>
     <p class="text-slate-400 text-sm mt-1">
       Aggregated across {{ report.totals.total_runs or 0 }} runs in <code class="text-xs">results/</code>.
-      Per-backend mean &plusmn; standard error.
+      Per-arm mean &plusmn; standard error.
+    </p>
+    <p class="text-slate-500 text-xs mt-2 max-w-3xl">
+      Arms are keyed by backend <em>and</em> ansatz mode where a run declares one.
+      A <code class="text-[11px]">legacy_full</code> and a <code class="text-[11px]">matched</code>
+      LiH run share a backend and a Hamiltonian but execute different circuits
+      (12 qubits / 92 parameters versus 10 / 24), so they are never averaged
+      together and CPU/GPU ratios are only computed within a single mode.
     </p>
   </div>
 
@@ -73,6 +80,14 @@
     showlegend: false,
   };
   const colors = { cpu: "#22d3ee", gpu_fp32: "#a78bfa", gpu_fp64: "#8b5cf6" };
+  // Arm keys carry the ansatz mode ("gpu_fp64 · matched"), so colour by the
+  // backend field instead, and dim the legacy arm so the two circuits are
+  // distinguishable at a glance.
+  const armColor = (data, arm) => {
+    const s = data.backends[arm];
+    const base = colors[s.backend] || "#06b6d4";
+    return s.ansatz_mode === "legacy_full" ? "#64748b" : base;
+  };
   for (const [mol, data] of Object.entries(report.by_molecule || {})) {
     const backends = Object.keys(data.backends);
     const walltimes = backends.map(b => data.backends[b].wall_time_seconds.mean);
@@ -81,12 +96,12 @@
     Plotly.react("walltime-" + mol, [{
       type: "bar", x: backends, y: walltimes,
       error_y: { type: "data", array: wallerr, color: "#94a3b8" },
-      marker: { color: backends.map(b => colors[b] || "#06b6d4") },
+      marker: { color: backends.map(b => armColor(data, b)) },
       hovertemplate: "%{x}<br>%{y:.3f} s<extra></extra>"
     }], { ...layoutBase, title: { text: "wall time (s)", font: { size: 13, color: "#cbd5e1" } }, yaxis: { ...layoutBase.yaxis, title: "seconds" } }, { displaylogo: false, responsive: true });
     Plotly.react("error-" + mol, [{
       type: "bar", x: backends, y: errs,
-      marker: { color: backends.map(b => colors[b] || "#06b6d4") },
+      marker: { color: backends.map(b => armColor(data, b)) },
       hovertemplate: "%{x}<br>%{y:.2e} Ha<extra></extra>"
     }], { ...layoutBase, title: { text: "|error vs reference| (Ha)", font: { size: 13, color: "#cbd5e1" } }, yaxis: { ...layoutBase.yaxis, title: "Ha", type: "log" } }, { displaylogo: false, responsive: true });
   }

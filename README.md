@@ -15,11 +15,13 @@
 [![Home page screenshot](docs/images/01-home.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/)
 
 The live demo is a pre-rendered snapshot of the FastAPI/HTMX UI hosted from
-an Akamai Object Storage bucket. It shows the actual Jakarta Blackwell host
-fingerprint (RTX PRO 6000 Blackwell, driver 580.159.03, CUDA 13.0, 96 GB
-VRAM) and embeds the real run manifests, traces, and comparison report
-inline. The "Run an experiment" form is intentionally inert in static mode
-&mdash; clone the repo to run live.
+an Akamai Object Storage bucket. It shows the actual Blackwell host
+fingerprint (RTX PRO 6000 Blackwell Server Edition, driver 580.173.02,
+CUDA 13.0, 96 GB VRAM) and embeds 24 real run manifests, traces, and the
+comparison report inline &mdash; 9 H2 runs from the 2026-05-04 multi-seed
+bench plus all 15 LiH runs from the 2026-07-27 ansatz follow-up. The
+"Run an experiment" form is intentionally inert in static mode &mdash;
+clone the repo to run live.
 
 This project supports the technical blog post **"Why GPUs Matter to Quantum
 Before QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
@@ -90,30 +92,66 @@ GPU/CPU wall-time speedups:
 - **LiH / FP64: 1.665×** &mdash; the speedup is real and the variance
   bars are tight (~0.4% relative stderr on each backend).
 
-LiH convergence and seed variance:
+The LiH rows above are **superseded** &mdash; see the next section. No LiH
+seed reached chemical accuracy here, and one of three landed ~126 mHa away
+in a different basin. At the time the cause was an open question; it has
+since been isolated and fixed.
 
-- 2 / 3 LiH seeds (42, 43) converge within 1.1 mHa of each other to
-  -7.875 to -7.876 Ha &mdash; that is **5.8&ndash;6.9 mHa above** the
-  PySCF-computed CASCI(2e,5o) minimum of -7.882164 Ha. None of these
-  runs reach the 1.6 mHa chemical-accuracy threshold; the residual is
-  optimizer / over-parametrization (the LiH ansatz currently
-  instantiates 92 UCCSD parameters on a 12-qubit kernel for a Hamiltonian
-  that lives on 5 active orbitals) rather than active-space frozen-core
-  error &mdash; CASCI(2e,5o) and full FCI are only 0.227 mHa apart at
-  this geometry, so the active space captures essentially all of the
-  FCI correlation.
-- 1 / 3 LiH seeds (44) lands in a different basin at -7.756 Ha,
-  ~126 mHa above the converged sibling seeds. This is the variance
-  signal single-seed benchmarks miss: UCCSD with COBYLA is sensitive
-  to initialization, and 1-in-3 lands somewhere you do not want.
+## The LiH result was an ansatz bug, not a hardware limit (2026-07-27)
+
+The LiH Hamiltonian is built for a (2 electron, 5 orbital) active space, a
+10-qubit operator. Through v0.1 the UCCSD ansatz was dimensioned from
+full-molecule metadata instead, producing a **12-qubit / 92-parameter**
+circuit for a 10-qubit problem. v0.2 made this an explicit choice, and a
+controlled follow-up ran both dimensionings against the same Hamiltonian:
+three arms, five seeds each, identical 1500-iteration COBYLA budget,
+15 LiH runs on one Blackwell host in `us-east`.
+
+| Arm | Circuit | Iterations | Wall (s) mean ± stderr | &#124;error&#124; vs CASCI(2e,5o) (mHa) | chem. acc. |
+|---|---|---|---:|---|:-:|
+| `legacy_full` / `nvidia:fp64` | 12q, 92p | 1500 (cap hit, 5/5) | 1068.84 ± 3.47 | mean 31.18, median 6.92, max 126.01 | **0 / 5** |
+| `matched` / `nvidia:fp64` | 10q, 24p | 1030 (converged) | **719.40 ± 5.50** | **0.0000** | **5 / 5** |
+| `matched` / `qpp-cpu` | 10q, 24p | 1055 (converged) | 773.38 ± 30.07 | **0.0000** | **5 / 5** |
+
+Matching the circuit to the active space takes LiH from **0/5 seeds
+reaching chemical accuracy to 5/5**. Every matched run recovered
+CASCI(2e,5o) = -7.882164 Ha to `-7.8821640299` &mdash; about 1e-13 Ha
+&mdash; on all five seeds and both backends, with zero spread. Every
+`legacy_full` run exhausted its budget without converging.
+
+That exactness is expected rather than lucky: with 2 active electrons,
+singles and doubles already span the entire CI space of the active space,
+so UCCSD is equivalent to FCI for this problem once dimensioned correctly.
+
+**Do not read the 1.49× wall-time win as a GPU result.** It comes from
+needing fewer and cheaper evaluations (1030 vs 1500, at 698.4 vs 712.6 ms),
+not from acceleration. The honest CPU-versus-GPU number for the same
+circuit is **1.075×**, GPU utilization sampled **0%** with 621 MiB
+allocated, and a 10-qubit statevector is 1024 amplitudes &mdash; these runs
+are bound by Python and CUDA-Q per-`observe()` overhead, not linear
+algebra. This sweep has no `legacy_full` CPU arm, so it neither reproduces
+nor refutes the 1.665× LiH figure above.
+
+As a correctness check, CPU and GPU FP64 agreed on all five matched seeds
+to a maximum absolute difference of **6.6e-13 Ha**, zero violations of a
+1e-8 Ha tolerance.
+
+Full numbers, provenance, and the reproduction command are in
+[`results/lih-active-space-followup-v02/`](results/lih-active-space-followup-v02/).
+VM lifetime 3 h 54 min at $3.00/hr = **$11.74**; run in `us-east` because
+Blackwell now carries a $1.50/hr surcharge in `id-cgk`.
 
 [![CPU vs GPU comparison page](docs/images/02-compare.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/compare/)
 
-Each run is drillable. The screenshot below is the seed-43 LiH GPU run
-on the Blackwell card &mdash; 1500 COBYLA iterations, energy descent
-to -7.876 Ha, full manifest and host fingerprint inline:
+The comparison page keys arms by backend *and* ansatz mode, so the two LiH
+circuits are never averaged together and CPU/GPU ratios are only computed
+within a single mode.
 
-[![LiH GPU run detail](docs/images/04-result-lih-gpu.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/results/20260504T003023Z-0a0a17/)
+Each run is drillable. Below is the seed-42 matched LiH GPU run on the
+Blackwell card &mdash; convergence to the CASCI reference, with the full
+manifest and host fingerprint inline:
+
+[![LiH matched GPU run detail](docs/images/04-result-lih-matched-gpu.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/results/20260727T221947Z-11edeb/)
 
 [![Results list](docs/images/03-results-list.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/results/)
 

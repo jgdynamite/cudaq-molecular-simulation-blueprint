@@ -29,6 +29,7 @@ def _make_manifest(
     energy: float = -1.137,
     wall_time: float = 1.0,
     n_iter: int = 30,
+    notes: dict[str, object] | None = None,
 ) -> tuple[RunManifest, IterationTrace]:
     geometry = (
         [("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 0.7414))]
@@ -49,6 +50,7 @@ def _make_manifest(
         qubit_count=4 if molecule == Molecule.H2 else 10,
         parameter_count=3 if molecule == Molecule.H2 else 24,
         system_info={"platform": "test"},
+        notes=notes or {},
         result=RunResult(
             energy=energy,
             iterations=n_iter,
@@ -125,3 +127,62 @@ def test_compare_groups_by_molecule_and_backend() -> None:
     assert "gpu_fp64" in h2["backends"]
     speedup = h2["speedups"]["cpu_over_gpu_fp64_wall_time"]
     assert 3.5 < speedup < 4.5
+
+
+def test_compare_never_merges_ansatz_modes_on_the_same_backend() -> None:
+    """Two LiH arms on one backend must stay separate.
+
+    legacy_full and matched share a molecule, a backend and a Hamiltonian but
+    execute different circuits, so averaging them would report a mean that
+    describes neither run.
+    """
+    for run_id, mode, wall in [
+        ("r-legacy", "legacy_full", 1000.0),
+        ("r-matched", "matched", 700.0),
+    ]:
+        manifest, trace = _make_manifest(
+            run_id=run_id,
+            backend=BackendIdentifier.GPU_FP64,
+            target="nvidia:fp64",
+            molecule=Molecule.LIH,
+            energy=-7.88,
+            wall_time=wall,
+            notes={"ansatz_mode": mode},
+        )
+        save_manifest(manifest)
+        save_trace(trace)
+
+    arms = compare_cpu_vs_gpu()["by_molecule"]["lih"]["backends"]
+
+    assert set(arms) == {"gpu_fp64 · legacy_full", "gpu_fp64 · matched"}
+    assert arms["gpu_fp64 · legacy_full"]["n"] == 1
+    assert arms["gpu_fp64 · matched"]["n"] == 1
+    assert arms["gpu_fp64 · legacy_full"]["wall_time_seconds"]["mean"] == 1000.0
+    assert arms["gpu_fp64 · matched"]["wall_time_seconds"]["mean"] == 700.0
+
+
+def test_compare_pairs_cpu_and_gpu_only_within_the_same_ansatz_mode() -> None:
+    """A CPU/GPU ratio across different circuits would be meaningless."""
+    specs = [
+        ("r-legacy-gpu", BackendIdentifier.GPU_FP64, "nvidia:fp64", "legacy_full", 1000.0),
+        ("r-matched-gpu", BackendIdentifier.GPU_FP64, "nvidia:fp64", "matched", 700.0),
+        ("r-matched-cpu", BackendIdentifier.CPU, "qpp-cpu", "matched", 1400.0),
+    ]
+    for run_id, backend, target, mode, wall in specs:
+        manifest, trace = _make_manifest(
+            run_id=run_id,
+            backend=backend,
+            target=target,
+            molecule=Molecule.LIH,
+            energy=-7.88,
+            wall_time=wall,
+            notes={"ansatz_mode": mode},
+        )
+        save_manifest(manifest)
+        save_trace(trace)
+
+    speedups = compare_cpu_vs_gpu()["by_molecule"]["lih"]["speedups"]
+
+    # Only the matched arm has both a CPU and a GPU run, so it is the only
+    # pairing available; the legacy GPU arm has no CPU counterpart here.
+    assert speedups == {"matched/cpu_over_gpu_fp64_wall_time": 2.0}
