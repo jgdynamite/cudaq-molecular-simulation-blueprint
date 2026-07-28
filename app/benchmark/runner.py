@@ -173,8 +173,9 @@ def default_blog_suite(
     there in ~75 evaluations.
 
     Three seeds is a deliberate trade-off. The 2026-05-04 multi-seed bench in
-    Akamai's id-cgk (Jakarta) region, billed at the regional rate of $3.00/hr
-    (a $0.50/hr uplift on the $2.50/hr base SKU), came in at ~$10.75 of total
+    Akamai's id-cgk (Jakarta) region, billed at the then-current regional
+    rate of $3.00/hr (a $0.50/hr uplift on the $2.50/hr base SKU; by
+    2026-07 the id-cgk surcharge had risen to $1.50/hr), came in at ~$10.75 of total
     VM lifetime: ~2 h 27 min of bench compute plus ~1 h 8 min of provisioning
     + driver install + container build + results export + teardown overhead.
     Bumping the seed count from 3 to 5 would have added roughly an hour of

@@ -6,10 +6,9 @@
 
 This site is the long-form companion to the
 [GitHub repository](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint).
-It supports the technical blog post **"Why GPUs Matter to Quantum Before
-QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
-Simulation"** by making the hybrid quantum workflow concrete, runnable,
-and reproducible.
+It is the reference implementation behind the article **"Quantum
+Computing: What Every CIO Should Understand Before Investing"**, making
+the hybrid quantum workflow concrete, runnable, and reproducible.
 
 ## Validated on Blackwell (Jakarta, multi-seed re-bench 2026-05-04)
 
@@ -18,7 +17,9 @@ driver `nvidia-open-580.159.03` (`nvidia-smi` reports max-supported
 CUDA 13.0); container uses `cuda-quantum-cu13` wheels on top of the
 CUDA 12.6 base image. 96 GB VRAM, 16 vCPU, 172 GB system RAM. 15 specs
 total (3 RNG seeds per backend), 2 h 27 min of bench compute, ~3 h 35
-min total VM lifetime, ~$10.75 at the Jakarta regional rate of $3.00/hr.
+min total VM lifetime, ~$10.75 at the Jakarta regional rate of $3.00/hr
+in effect at the time. That surcharge rose before the July follow-up,
+which is why the later run moved to `us-east`.
 
 | Molecule | Backend | n | Wall (s) mean ± stderr | Energy mean (Ha) | min &#124;err&#124; (mHa) | chem. acc. |
 |---|---|:-:|---:|---:|---:|:-:|

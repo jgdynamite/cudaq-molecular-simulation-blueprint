@@ -23,10 +23,11 @@ bench plus all 15 LiH runs from the 2026-07-27 ansatz follow-up. The
 "Run an experiment" form is intentionally inert in static mode &mdash;
 clone the repo to run live.
 
-This project supports the technical blog post **"Why GPUs Matter to Quantum
-Before QPUs Do: Using CUDA-Q, cuQuantum, and Blackwell GPUs for Molecular
-Simulation."** It exists to make the hybrid quantum workflow concrete,
-runnable, and reproducible.
+This project is the reference implementation behind the article
+**"Quantum Computing: What Every CIO Should Understand Before
+Investing."** It exists to make the hybrid quantum workflow concrete,
+runnable, and reproducible &mdash; and to let any claim in that article
+be checked against the underlying manifests.
 
 It is **not** a quantum-advantage claim, **not** a positioning of Akamai as
 a dedicated quantum cloud, and **not** a cross-cloud benchmark. It **is** a
@@ -64,8 +65,14 @@ lifetime was ~3 h 35 min (provisioning, NVIDIA driver install +
 reboot, container build, bench, results export, one mid-cycle reboot
 to clear `MaxStartups`, teardown), and at Akamai's `id-cgk` regional
 rate of $3.00/hr the VM cost ~$10.75 end-to-end &mdash; **not** 2 h 27
-min × $2.50/hr. The `id-cgk` and `br-gru` regions carry a $0.50/hr
+min × $2.50/hr. At that time `id-cgk` and `br-gru` carried a $0.50/hr
 uplift over the $2.50/hr base SKU rate.
+
+Note that this rate changed between the two bench cycles. As of the
+2026-07-27 follow-up, `id-cgk` carried a $1.50/hr surcharge rather than
+$0.50/hr, putting Blackwell there at $4.50/hr against $3.00/hr in
+`us-east`. Both figures below are correct for their own date; the
+May numbers are not a typo for the July ones.
 
 | Molecule | Backend | n | Wall (s) mean ± stderr | Energy mean (Ha) | min &#124;err vs CASCI(2e,5o)&#124; (mHa) | chem. acc.<sup>†</sup> |
 |---|---|:-:|---:|---:|---:|:-:|

@@ -57,7 +57,7 @@
         <input type="number" step="0.01" name="bond_distance" placeholder="auto" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
       </div>
       <div>
-        <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Max iterations</label>
+        <label class="block text-xs uppercase tracking-widest text-slate-400 mb-1">Max evaluations</label>
         <input type="number" name="max_iterations" value="200" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" />
       </div>
       <div>
@@ -157,7 +157,7 @@
       const r = JSON.parse(ev.data);
       records.push(r);
       plot(records);
-      status.textContent = `running &middot; iter ${r.iteration} &middot; E = ${r.energy.toFixed(6)}`;
+      status.textContent = `running &middot; eval ${r.iteration} &middot; E = ${r.energy.toFixed(6)}`;
     });
     es.addEventListener("completed", async () => {
       es.close();
@@ -170,7 +170,7 @@
           summary.innerHTML = `
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-slate-200">
               <div><div class="text-slate-500 text-xs">final energy</div><div class="font-mono">${r.energy.toFixed(6)} Ha</div></div>
-              <div><div class="text-slate-500 text-xs">iterations</div><div class="font-mono">${r.iterations}</div></div>
+              <div><div class="text-slate-500 text-xs">evaluations</div><div class="font-mono">${r.iterations}</div></div>
               <div><div class="text-slate-500 text-xs">wall time</div><div class="font-mono">${r.wall_time_seconds.toFixed(3)} s</div></div>
               <div><div class="text-slate-500 text-xs">chemical accuracy</div><div class="font-mono">${r.chemical_accuracy_reached ? "yes" : "no"}</div></div>
             </div>

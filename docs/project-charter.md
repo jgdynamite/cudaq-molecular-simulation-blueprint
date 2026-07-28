@@ -13,10 +13,15 @@ Edition infrastructure.
 
 ## Primary narrative
 
-This project exists to support a technical blog post titled:
+This project exists to support a technical article titled:
 
-> "Why GPUs Matter to Quantum Before QPUs Do: Using CUDA-Q, cuQuantum, and
-> Blackwell GPUs for Molecular Simulation."
+> "Quantum Computing: What Every CIO Should Understand Before Investing."
+
+(Working title through the May 2026 bench cycle: "Why GPUs Matter to
+Quantum Before QPUs Do." The scope below is unchanged; the framing moved
+from a GPU-performance argument to an investment-discipline argument
+after the July active-space follow-up showed the headline speedup was an
+artifact of ansatz misdimensioning.)
 
 ## Core thesis
 
