@@ -9,12 +9,16 @@
 # to GHCR when v0.1.0 is tagged - that is the public-reproduction path,
 # not this one.
 
-- name: Ensure results directory exists on VM
+# Owned by the container's unprivileged uid, not root: the image drops to
+# uid 10001 and bind-mounts this directory at /data/results, so a root-owned
+# 0755 directory makes every run fail with PermissionError when it writes
+# its manifest.
+- name: Ensure results directory exists on VM and is writable by the container user
   ansible.builtin.file:
     path: "{{ cudaq_results_dir }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ cudaq_container_uid }}"
+    group: "{{ cudaq_container_gid }}"
     mode: "0755"
 
 - name: Ensure source directory exists on VM

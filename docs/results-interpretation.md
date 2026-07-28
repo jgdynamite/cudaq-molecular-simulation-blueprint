@@ -84,9 +84,44 @@ guessing. It never merges a `legacy_full` group with a `matched` group.
 
 The controlled comparison between the two modes is specified in
 [experiment-methodology.md](experiment-methodology.md#the-ansatzhamiltonian-mismatch-v01).
-**It has not been run yet**, so this repository currently contains no
-measurement of what the matched ansatz does to accuracy, convergence,
-seed stability, or wall time.
+It was run on 2026-07-27 on an Akamai Blackwell host in `us-east`: three
+arms, five seeds each, 15 LiH runs at an identical 1500-iteration budget.
+Full numbers are in
+[`results/lih-active-space-followup-v02/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/results/lih-active-space-followup-v02).
+
+| arm | iterations | wall (s) | \|error\| (mHa) | chem. accuracy |
+|---|---|---|---|---|
+| `legacy_full` / GPU | 1500 (cap hit, 5/5) | 1068.8 ± 3.5 | mean 31.18, median 6.92, max 126.01 | 0/5 |
+| `matched` / GPU | 1030 mean (converged) | 719.4 ± 5.5 | 0.0000 | 5/5 |
+| `matched` / CPU | 1055 mean (converged) | 773.4 ± 30.1 | 0.0000 | 5/5 |
+
+Three conclusions follow, and they are worth keeping separate.
+
+**Accuracy.** The mismatch was the whole story. Every `legacy_full` run
+exhausted its budget without converging and none reached chemical
+accuracy, with a 53 mHa spread across seeds. Every `matched` run
+converged on its own and landed on `-7.8821640299` Ha, which is
+CASCI(2e,5o) to ~1e-13 Ha, on all five seeds and both backends. This is
+expected rather than lucky: with 2 active electrons, singles and doubles
+already span the full CI space of the active space, so UCCSD is
+equivalent to FCI for this problem and the correctly dimensioned circuit
+is exact.
+
+**Wall time.** The matched arm is 1.49x faster than legacy on the same
+GPU, but that came from needing fewer and slightly cheaper evaluations
+(1030 vs 1500, 698.4 vs 712.6 ms each), not from the hardware.
+
+**The accelerator.** At this scale it contributes very little. The matched
+CPU/GPU wall-time ratio is 1.075 and the per-evaluation ratio is 1.049,
+with GPU utilization sampling 0% throughout. A 10-qubit statevector is
+1024 amplitudes, so runtime is bound by Python and CUDA-Q per-`observe()`
+overhead rather than linear algebra. Do not read the 1.49x as a GPU
+result. Note also that this sweep has no `legacy_full` CPU arm, so it
+does not reproduce or refute the 1.665x LiH figure from the May bench.
+
+As a correctness check, CPU and GPU FP64 agreed on all 5 matched seeds to
+a maximum absolute difference of 6.6e-13 Ha, with zero violations of a
+1e-8 Ha tolerance.
 
 The reference table in `app/quantum/reference_data.py` was recomputed
 via PySCF on 2026-05-04 (`pyscf.mcscf.CASCI`) so chemical accuracy is

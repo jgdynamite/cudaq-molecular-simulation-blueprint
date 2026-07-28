@@ -59,6 +59,11 @@ results/akamai-blackwell-multiseed/*
 !results/akamai-blackwell-multiseed/SUMMARY.csv
 !results/akamai-blackwell-multiseed/comparison.json
 !results/akamai-blackwell-multiseed/README.md
+!results/lih-active-space-followup-v02/
+results/lih-active-space-followup-v02/*
+!results/lih-active-space-followup-v02/SUMMARY.csv
+!results/lih-active-space-followup-v02/comparison.json
+!results/lih-active-space-followup-v02/README.md
 
 # Terraform
 *.tfstate

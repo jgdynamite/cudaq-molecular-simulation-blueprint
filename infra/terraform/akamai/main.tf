@@ -58,13 +58,16 @@ resource "linode_firewall" "blackwell" {
   label = "${var.label}-fw"
   tags  = var.tags
 
+  # The provider rejects an empty ipv4/ipv6 list, so a family with no CIDRs
+  # must be omitted entirely (null) rather than passed as []. Restricting to
+  # a single IPv4 /32 is the common case and used to fail the plan outright.
   inbound {
     label    = "allow-ssh"
     action   = "ACCEPT"
     protocol = "TCP"
     ports    = "22"
-    ipv4     = [for c in var.firewall_allowed_ssh_cidrs : c if length(regexall(":", c)) == 0]
-    ipv6     = [for c in var.firewall_allowed_ssh_cidrs : c if length(regexall(":", c)) > 0]
+    ipv4     = length(local.ssh_cidrs_v4) > 0 ? local.ssh_cidrs_v4 : null
+    ipv6     = length(local.ssh_cidrs_v6) > 0 ? local.ssh_cidrs_v6 : null
   }
 
   inbound {
@@ -72,8 +75,8 @@ resource "linode_firewall" "blackwell" {
     action   = "ACCEPT"
     protocol = "TCP"
     ports    = "8000"
-    ipv4     = [for c in var.firewall_allowed_app_cidrs : c if length(regexall(":", c)) == 0]
-    ipv6     = [for c in var.firewall_allowed_app_cidrs : c if length(regexall(":", c)) > 0]
+    ipv4     = length(local.app_cidrs_v4) > 0 ? local.app_cidrs_v4 : null
+    ipv6     = length(local.app_cidrs_v6) > 0 ? local.app_cidrs_v6 : null
   }
 
   inbound_policy  = "DROP"
@@ -84,6 +87,11 @@ resource "linode_firewall" "blackwell" {
 
 locals {
   blackwell_public_ip = try(tolist(linode_instance.blackwell.ipv4)[0], "")
+
+  ssh_cidrs_v4 = [for c in var.firewall_allowed_ssh_cidrs : c if length(regexall(":", c)) == 0]
+  ssh_cidrs_v6 = [for c in var.firewall_allowed_ssh_cidrs : c if length(regexall(":", c)) > 0]
+  app_cidrs_v4 = [for c in var.firewall_allowed_app_cidrs : c if length(regexall(":", c)) == 0]
+  app_cidrs_v6 = [for c in var.firewall_allowed_app_cidrs : c if length(regexall(":", c)) > 0]
 }
 
 resource "local_file" "ansible_inventory" {

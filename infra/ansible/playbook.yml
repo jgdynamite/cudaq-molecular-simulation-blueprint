@@ -13,6 +13,9 @@
     cudaq_source_dir: "/opt/cudaq-blueprint"
     cudaq_app_port: 8000
     cudaq_results_dir: "/var/lib/cudaq-blueprint/results"
+    # Must match the USER declared in containers/Dockerfile.
+    cudaq_container_uid: "10001"
+    cudaq_container_gid: "10001"
     # Branch 580 is the current NVIDIA Long-Term Support Branch (LTSB).
     # Required for Blackwell (RTX PRO 6000, RTX 50 series): branch >= 565,
     # and OPEN kernel modules only (nvidia-open-580, not nvidia-driver-580).
