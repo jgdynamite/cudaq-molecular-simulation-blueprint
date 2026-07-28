@@ -230,12 +230,15 @@ def bench_run_suite(
         help="Comma-separated seed list (e.g. '42,43,44').",
     ),
     h2_max_iterations: int = typer.Option(
-        200, "--h2-max-iterations", help="COBYLA max iterations for H2."
+        200, "--h2-max-iterations", help="COBYLA budget for H2, in objective-function evaluations."
     ),
     lih_max_iterations: int = typer.Option(
         1500,
         "--lih-max-iterations",
-        help="COBYLA max iterations for LiH (300 was the v0.1.0 cap; 1500 lets it converge).",
+        help=(
+            "COBYLA budget for LiH, in objective-function evaluations "
+            "(300 was the v0.1.0 cap; 1500 lets it converge)."
+        ),
     ),
     skip_gpu: bool = typer.Option(
         False, "--skip-gpu", help="Skip GPU backends (e.g. for CPU-only smoke tests)."
@@ -244,8 +247,8 @@ def bench_run_suite(
     """Run the full multi-seed benchmark suite end-to-end.
 
     Defaults reproduce the post-v0.1.0 publication suite (3 seeds, LiH max
-    iterations bumped from 300 to 1500 so the optimizer can reach chemical
-    accuracy). Each spec is persisted as a regular run manifest + trace, so
+    evaluation budget bumped from 300 to 1500 so the optimizer can reach
+    chemical accuracy). Each spec is persisted as a regular run manifest + trace, so
     the standard ``cudaq-bp results list`` and ``cudaq-bp bench compare``
     commands continue to work afterwards.
     """
@@ -304,7 +307,10 @@ def bench_run_lih_active_space_followup(
     max_iterations: int = typer.Option(
         1500,
         "--max-iterations",
-        help="COBYLA max iterations, applied identically to all three arms.",
+        help=(
+            "COBYLA budget in objective-function evaluations, applied "
+            "identically to all three arms."
+        ),
     ),
     output_dir: str = typer.Option(
         DEFAULT_FOLLOWUP_OUTPUT_DIR,
@@ -317,13 +323,13 @@ def bench_run_lih_active_space_followup(
 ) -> None:
     """Run the LiH active-space ansatz follow-up experiment.
 
-    Three arms at a fixed iteration budget: legacy_full on GPU FP64, matched
+    Three arms at a fixed evaluation budget: legacy_full on GPU FP64, matched
     on GPU FP64, and matched on CPU. Arms run contiguously so CPU and GPU
     work is never interleaved. Writes SUMMARY.csv and comparison.json into
     the output directory when the sweep finishes.
 
     This is a long sweep. With five seeds it is 15 LiH runs at up to 1500
-    COBYLA iterations each; budget accordingly before starting a GPU VM.
+    COBYLA evaluations each; budget accordingly before starting a GPU VM.
     """
     from app.benchmark.followup import generate_reports
     from app.benchmark.runner import lih_active_space_followup_suite, run_benchmark_suite

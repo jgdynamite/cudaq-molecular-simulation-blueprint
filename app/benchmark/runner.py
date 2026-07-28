@@ -158,12 +158,18 @@ def default_blog_suite(
 
     For each backend we sweep multiple seeds so we can quote mean ± stderr.
 
-    LiH defaults to ``max_iterations=1500``: with 92 UCCSD parameters on a
-    12-qubit kernel (the LiH ansatz currently instantiates the full-molecule
-    parameter space rather than restricting to the (2e, 5o) active space,
-    even though the Hamiltonian itself does carry the active-space
-    restriction), COBYLA needs the full 1500 iterations to settle into the
-    converged basin. ``h2`` is left at 200 because COBYLA already plateaus
+    LiH defaults to ``max_iterations=1500``. Note that SciPy's COBYLA reads
+    this as ``maxfun`` -- a cap on objective-function evaluations, not on
+    outer iterations.
+
+    This budget was sized for the v0.1 behaviour, where the LiH ansatz was
+    dimensioned from full-molecule metadata (12 qubits, 92 parameters) and
+    exhausted all 1500 evaluations without converging. ``BenchmarkSpec``
+    now defaults to ``ansatz_mode=MATCHED``, so this suite builds a
+    10-qubit / 24-parameter circuit matched to the (2e, 5o) Hamiltonian,
+    which converges on its own in roughly 1000-1100 evaluations. The 1500
+    cap is retained as headroom and to keep the budget comparable with the
+    legacy arm. ``h2`` is left at 200 because COBYLA already plateaus
     there in ~75 evaluations.
 
     Three seeds is a deliberate trade-off. The 2026-05-04 multi-seed bench in

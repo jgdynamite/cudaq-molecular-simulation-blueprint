@@ -17,7 +17,7 @@ the fields. There is no derived "secret sauce" - the JSON is the chart.
 |--------------------------------|----------------------------------------------------------------------|
 | `wall_time_seconds`            | total time the optimizer ran on that backend, end to end             |
 | `time_per_evaluation_ms`       | wall_time / function_evaluations - per-statevector throughput proxy  |
-| `iterations`                   | outer COBYLA iterations until termination                            |
+| `iterations`                   | evaluation count (SciPy COBYLA exposes no `nit`; equals `function_evaluations`) |
 | `error_vs_reference_hartree`   | `final_energy - reference_energy` (Hartree)                          |
 | `chemical_accuracy_reached`    | `\|error\| < 1.6 mHa`                                                 |
 
@@ -85,15 +85,15 @@ guessing. It never merges a `legacy_full` group with a `matched` group.
 The controlled comparison between the two modes is specified in
 [experiment-methodology.md](experiment-methodology.md#the-ansatzhamiltonian-mismatch-v01).
 It was run on 2026-07-27 on an Akamai Blackwell host in `us-east`: three
-arms, five seeds each, 15 LiH runs at an identical 1500-iteration budget.
+arms, five seeds each, 15 LiH runs at an identical 1,500-evaluation budget.
 Full numbers are in
 [`results/lih-active-space-followup-v02/`](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint/tree/main/results/lih-active-space-followup-v02).
 
-| arm | iterations | wall (s) | \|error\| (mHa) | chem. accuracy |
+| arm | evaluations | wall (s) | \|error\| (mHa) | chem. accuracy |
 |---|---|---|---|---|
-| `legacy_full` / GPU | 1500 (cap hit, 5/5) | 1068.8 ± 3.5 | mean 31.18, median 6.92, max 126.01 | 0/5 |
-| `matched` / GPU | 1030 mean (converged) | 719.4 ± 5.5 | 0.0000 | 5/5 |
-| `matched` / CPU | 1055 mean (converged) | 773.4 ± 30.1 | 0.0000 | 5/5 |
+| `legacy_full` / GPU | 1500 (cap hit, 5/5) | 1068.8 ± 3.5 | median 6.92, mean 31.18 (seed-44 driven), max 126.01 | 0/5 |
+| `matched` / GPU | 1030 mean (converged) | 719.4 ± 5.5 | 2.99e-5 (reference-precision floor) | 5/5 |
+| `matched` / CPU | 1055 mean (converged) | 773.4 ± 30.1 | 2.99e-5 (reference-precision floor) | 5/5 |
 
 Three conclusions follow, and they are worth keeping separate.
 
@@ -111,13 +111,25 @@ is exact.
 GPU, but that came from needing fewer and slightly cheaper evaluations
 (1030 vs 1500, 698.4 vs 712.6 ms each), not from the hardware.
 
-**The accelerator.** At this scale it contributes very little. The matched
-CPU/GPU wall-time ratio is 1.075 and the per-evaluation ratio is 1.049,
-with GPU utilization sampling 0% throughout. A 10-qubit statevector is
-1024 amplitudes, so runtime is bound by Python and CUDA-Q per-`observe()`
-overhead rather than linear algebra. Do not read the 1.49x as a GPU
-result. Note also that this sweep has no `legacy_full` CPU arm, so it
-does not reproduce or refute the 1.665x LiH figure from the May bench.
+**The accelerator.** At this scale it contributes nothing reliable. The
+mean paired matched CPU/GPU wall-time ratio is 1.075 ± 0.040, and on 2 of
+the 5 seeds (44 and 46) the CPU was *faster* than the GPU. With a sign
+change inside a 5-seed sample and a mean under two standard errors from
+parity, this is parity, not a speedup. A 10-qubit statevector is 1024
+amplitudes, so runtime is bound by Python and CUDA-Q per-`observe()`
+overhead rather than linear algebra. `nvidia-smi` spot checks showed the
+GPU essentially idle, but that sampling is not persisted in any manifest.
+Do not read the 1.49x as a GPU result. Note also that this sweep has no
+`legacy_full` CPU arm, so it does not reproduce or refute the 1.665x LiH
+figure from the May bench.
+
+**A caveat on the timing comparison specifically.** All 15 configurations
+ran sequentially in one Python process, switching CUDA-Q targets in place,
+with the CPU arm last after three hours of GPU work. The energies are
+unaffected &mdash; CPU and GPU agree to 6.6e-13 Ha &mdash; but the CPU arm
+also carries by far the largest wall-time dispersion (SD 67.2 s, against
+7.8 s and 12.3 s for the GPU arms), and a single-process design is the
+weakest possible basis for a hardware timing claim.
 
 As a correctness check, CPU and GPU FP64 agreed on all 5 matched seeds to
 a maximum absolute difference of 6.6e-13 Ha, with zero violations of a
@@ -131,8 +143,15 @@ full FCI are only 0.227 mHa apart, so the active-space approximation
 is not the limiting factor: any error larger than ~1 mHa is optimizer /
 ansatz residual.
 
+Those reference values are stored to six decimal places, which sets a hard
+floor on reported accuracy at roughly 1e-6 Ha. The matched LiH runs land
+slightly *below* the stored CASCI(2e,5o) constant, so their 2.99e-5 mHa
+"error" is reference truncation rather than a measured deviation. Claims
+about run-to-run reproducibility (~1e-13 Ha here) are well supported;
+claims about absolute accuracy finer than ~1e-6 Ha are not.
+
 The 2026-05-04 multi-seed bench reflects this. With 1500 COBYLA
-iterations, two of three seeds (42, 43) converge to within 1.1 mHa of
+evaluations, two of three seeds (42, 43) converge to within 1.1 mHa of
 each other but stop ~5.8&ndash;6.9 mHa above CASCI(2e,5o); the third
 seed (44) lands ~126 mHa above in a separate basin. None of these
 runs reach chemical accuracy.

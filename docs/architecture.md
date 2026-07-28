@@ -105,10 +105,12 @@ reproducibility context:
 - CUDA-Q version, target string, RNG seed, optimizer settings.
 - Geometry, basis set, charge, multiplicity, optional active-space.
 - System info: OS, CPU, Python, NVIDIA driver, CUDA version, GPU model + UUID,
-  memory, container digest (when applicable).
-- Git SHA of the code that produced it.
-- Final result: energy, parameters, iterations, wall time, error vs reference,
-  whether chemical accuracy was reached.
+  memory.
+- Git SHA of the code that produced it, when the process can see a `.git`
+  directory. Container-based runs record `null` here; there is no container
+  image ID or digest field in the schema. See the README provenance note.
+- Final result: energy, parameters, evaluation count, wall time, error vs
+  reference, whether chemical accuracy was reached.
 
 This is the artifact downstream tools (`compare`, the UI, the blog post) all
 read from. There is no database in v1 - the filesystem is the source of truth.

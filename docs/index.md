@@ -65,9 +65,16 @@ container handles the Linux runtime transparently.
 ## Reproducibility
 
 Every run produces a JSON manifest capturing CUDA-Q version, target string,
-GPU model, driver version, OS, container digest, git SHA, RNG seed,
-optimizer settings, basis set, geometry, and active space. CI reproduces
-the H2 CPU result on every push, and the release workflow publishes the
-canonical container image to
-`ghcr.io/jgdynamite/cudaq-molecular-simulation-blueprint:<tag>` so any
-reader can pull-and-run the exact bits used in the blog post.
+GPU model, GPU UUID, driver version, OS, RNG seed, the realized initial
+parameter vector, optimizer settings, basis set, geometry, and active
+space. CI reproduces the H2 CPU result on every push.
+
+Manifests do **not** capture a container image digest, a git SHA (the field
+exists but is `null`, because the source tree reaches the host with `.git`
+excluded), a hostname, or SciPy/NumPy versions. The release workflow
+publishes a container image to
+`ghcr.io/jgdynamite/cudaq-molecular-simulation-blueprint:<tag>` that
+reproduces the *method*; it is not the exact binary that produced the
+published 2026-07-27 numbers, which was a local untagged build on a
+since-destroyed VM. See the [README](https://github.com/jgdynamite/cudaq-molecular-simulation-blueprint#reproducibility)
+for the full provenance statement.

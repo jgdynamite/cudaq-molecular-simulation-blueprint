@@ -17,7 +17,7 @@ unsupportable claims:
   [the ansatz/Hamiltonian mismatch](#the-ansatzhamiltonian-mismatch-v01)
   below. The CPU statevector simulator is noticeably slower than the GPU
   here: in the v0.1 configuration CPU runs took ~30 minutes per seed (1500
-  iterations of COBYLA) and GPU FP64 runs took ~18 minutes. The CPU
+  evaluations of COBYLA) and GPU FP64 runs took ~18 minutes. The CPU
   baseline remains feasible &mdash; you can leave it running over a coffee
   &mdash; but it is long enough to expose meaningful GPU wall-time savings
   rather than being a sub-second curiosity.
@@ -40,15 +40,18 @@ this project is for.
 | optimizer           | COBYLA (SciPy)                         | gradient-free, exposes a real per-eval trace        |
 | convergence test    | `\|E_VQE - E_FCI\| < 1.6e-3 Ha`         | chemical accuracy threshold                         |
 | RNG seed            | configurable (default 42)              | stamped into every manifest for reproducibility     |
-| seeds per backend   | 3 (default in `default_blog_suite`; H2 budget 200 iter, LiH 1500 iter) | mean +/- standard error in the comparison; LiH was bumped from 300 to 1500 after the v0.1.0 trace inspection showed COBYLA was still descending steadily at iter 300 |
+| seeds per backend   | 3 (default in `default_blog_suite`; H2 budget 200 evals, LiH 1500 evals) | mean +/- standard error in the comparison; LiH was bumped from 300 to 1500 after the v0.1.0 trace inspection showed COBYLA was still descending steadily at evaluation 300 |
 
 ## What is measured
 
 For every run we record:
 
 - **wall_time_seconds** - end-to-end time of the optimizer.
-- **iterations** - number of outer COBYLA iterations.
-- **function_evaluations** - number of `cudaq.observe` calls.
+- **iterations** - despite the name, this is *not* an outer-iteration
+  count. SciPy's COBYLA `OptimizeResult` exposes no `nit`, so this field
+  falls back to the length of the evaluation trace and is numerically
+  identical to `function_evaluations`. Treat the two as the same quantity.
+- **function_evaluations** - number of `cudaq.observe` calls (SciPy `nfev`).
 - **time_per_evaluation_ms** - wall_time / function_evaluations.
 - **final_energy** - the optimizer's `result.fun`.
 - **error_vs_reference_hartree** - `final_energy - E_reference`, where
@@ -126,8 +129,10 @@ committed results speaks to it.
 ### Controlled experiment design
 
 `cudaq-bp bench run-lih-active-space-followup` runs three arms over five
-seeds (42-46), 15 runs total, every run at the same 1500-iteration COBYLA
-budget:
+seeds (42-46), 15 runs total, every run at the same 1,500-evaluation COBYLA
+budget (the `--max-iterations` flag sets SciPy `maxiter`, which COBYLA
+interprets as a cap on objective-function evaluations, not outer
+iterations):
 
 | arm | ansatz mode | backend | qubits | parameters |
 |-----|-------------|---------|--------|------------|
@@ -156,7 +161,7 @@ overlap on the same host.
 ### Running it
 
 ```bash
-# Defaults: seeds 42-46, 1500 iterations, output to
+# Defaults: seeds 42-46, 1500 objective-function evaluations, output to
 # <results_dir>/lih-active-space-followup-v02/
 cudaq-bp bench run-lih-active-space-followup
 
@@ -167,7 +172,7 @@ cudaq-bp bench run-lih-active-space-followup \
   --output-dir lih-active-space-followup-v02
 ```
 
-This is a long sweep &mdash; 15 LiH runs at up to 1500 iterations each
+This is a long sweep &mdash; 15 LiH runs at up to 1500 objective-function evaluations each
 &mdash; so budget GPU time before starting. On completion it writes
 `SUMMARY.csv` (one row per run) and `comparison.json` into the output
 directory.

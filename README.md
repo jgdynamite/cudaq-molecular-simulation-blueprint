@@ -104,20 +104,34 @@ The LiH Hamiltonian is built for a (2 electron, 5 orbital) active space, a
 full-molecule metadata instead, producing a **12-qubit / 92-parameter**
 circuit for a 10-qubit problem. v0.2 made this an explicit choice, and a
 controlled follow-up ran both dimensionings against the same Hamiltonian:
-three arms, five seeds each, identical 1500-iteration COBYLA budget,
+three arms, five seeds each, identical 1,500-evaluation COBYLA budget,
 15 LiH runs on one Blackwell host in `us-east`.
 
-| Arm | Circuit | Iterations | Wall (s) mean ± stderr | &#124;error&#124; vs CASCI(2e,5o) (mHa) | chem. acc. |
+| Arm | Circuit | Evaluations | Wall (s) mean ± stderr | &#124;error&#124; vs CASCI(2e,5o) (mHa) | chem. acc. |
 |---|---|---|---:|---|:-:|
-| `legacy_full` / `nvidia:fp64` | 12q, 92p | 1500 (cap hit, 5/5) | 1068.84 ± 3.47 | mean 31.18, median 6.92, max 126.01 | **0 / 5** |
-| `matched` / `nvidia:fp64` | 10q, 24p | 1030 (converged) | **719.40 ± 5.50** | **0.0000** | **5 / 5** |
-| `matched` / `qpp-cpu` | 10q, 24p | 1055 (converged) | 773.38 ± 30.07 | **0.0000** | **5 / 5** |
+| `legacy_full` / `nvidia:fp64` | 12q, 92p | 1500 (cap hit, 5/5) | 1068.84 ± 3.47 | median 6.92, mean 31.18, max 126.01 | **0 / 5** |
+| `matched` / `nvidia:fp64` | 10q, 24p | 1030 (converged) | **719.40 ± 5.50** | 2.99e-5 † | **5 / 5** |
+| `matched` / `qpp-cpu` | 10q, 24p | 1055 (converged) | 773.38 ± 30.07 | 2.99e-5 † | **5 / 5** |
+
+> **†  That residual is not a measured accuracy.** The CASCI(2e,5o)
+> reference is stored to six decimal places (-7.882164 Ha) and the matched
+> VQE energies fall slightly *below* it, so 2.99e-5 mHa is the distance to
+> a truncated constant. Nothing in this dataset supports an accuracy claim
+> finer than the reference's ~1e-6 Ha quantization.
+
+The legacy arm's mean is driven almost entirely by seed 44 (126.01 mHa,
+11.7× the next largest error); excluding it the mean is 7.47 mHa. The
+median of 6.92 mHa is the representative figure. Seed 44 is not a
+mechanical fault &mdash; it is the overparametrization failure mode the
+experiment was built to expose.
 
 Matching the circuit to the active space takes LiH from **0/5 seeds
-reaching chemical accuracy to 5/5**. Every matched run recovered
-CASCI(2e,5o) = -7.882164 Ha to `-7.8821640299` &mdash; about 1e-13 Ha
-&mdash; on all five seeds and both backends, with zero spread. Every
-`legacy_full` run exhausted its budget without converging.
+reaching chemical accuracy to 5/5**. The matched arms are also extremely
+reproducible: all ten runs agree to within 1.6e-13 Ha (GPU) and 2.8e-13 Ha
+(CPU) within-arm, and to 6.6e-13 Ha across backends. That ~1e-13 figure
+describes run-to-run and backend-to-backend reproducibility, not agreement
+with CASCI &mdash; see the note above. Every `legacy_full` run exhausted
+its evaluation budget without converging.
 
 That exactness is expected rather than lucky: with 2 active electrons,
 singles and doubles already span the entire CI space of the active space,
@@ -125,12 +139,18 @@ so UCCSD is equivalent to FCI for this problem once dimensioned correctly.
 
 **Do not read the 1.49× wall-time win as a GPU result.** It comes from
 needing fewer and cheaper evaluations (1030 vs 1500, at 698.4 vs 712.6 ms),
-not from acceleration. The honest CPU-versus-GPU number for the same
-circuit is **1.075×**, GPU utilization sampled **0%** with 621 MiB
-allocated, and a 10-qubit statevector is 1024 amplitudes &mdash; these runs
-are bound by Python and CUDA-Q per-`observe()` overhead, not linear
-algebra. This sweep has no `legacy_full` CPU arm, so it neither reproduces
-nor refutes the 1.665× LiH figure above.
+not from acceleration. The honest CPU-versus-GPU comparison for the same
+circuit shows **no reliable GPU advantage at all**: the mean paired
+CPU/GPU wall-time ratio is 1.075 ± 0.040, and on 2 of the 5 seeds
+(44 and 46) the **CPU was faster than the GPU**. A mean that is under two
+standard errors from parity, with a sign change inside the sample, is not
+a speedup. A 10-qubit statevector is 1024 amplitudes, so these runs are
+bound by Python and CUDA-Q per-`observe()` overhead, not linear algebra.
+`nvidia-smi` spot checks during the sweep showed the GPU essentially idle,
+but that sampling is not persisted in any manifest and should be treated
+as an observation rather than a measurement. This sweep has no
+`legacy_full` CPU arm, so it neither reproduces nor refutes the 1.665×
+LiH figure above.
 
 As a correctness check, CPU and GPU FP64 agreed on all five matched seeds
 to a maximum absolute difference of **6.6e-13 Ha**, zero violations of a
@@ -138,8 +158,14 @@ to a maximum absolute difference of **6.6e-13 Ha**, zero violations of a
 
 Full numbers, provenance, and the reproduction command are in
 [`results/lih-active-space-followup-v02/`](results/lih-active-space-followup-v02/).
-VM lifetime 3 h 54 min at $3.00/hr = **$11.74**; run in `us-east` because
-Blackwell now carries a $1.50/hr surcharge in `id-cgk`.
+VM lifetime 3 h 54 m 45 s at $3.00/hr = **$11.74**; run in `us-east`
+because Blackwell now carries a $1.50/hr surcharge in `id-cgk`.
+
+All 15 configurations ran sequentially inside a single Python process,
+switching CUDA-Q targets in place, with the CPU arm last. The energies are
+unaffected (CPU and GPU agree to 6.6e-13 Ha), but the CPU-versus-GPU
+wall-time comparison is the measurement this design is least able to
+defend.
 
 [![CPU vs GPU comparison page](docs/images/02-compare.png)](https://cudaq-blueprint-demo.website-us-east-1.linodeobjects.com/compare/)
 
@@ -319,17 +345,31 @@ cudaq-molecular-simulation-blueprint/
 - [Akamai deployment](docs/akamai-deployment.md)
 - [Results interpretation](docs/results-interpretation.md)
 - [Scope and non-goals](docs/scope-and-non-goals.md)
-- [Blog support notes](docs/blog-support-notes.md)
 
 ## Reproducibility
 
 Every run produces a JSON manifest capturing CUDA-Q version, target string,
-GPU model, driver version, OS, container digest, git SHA, RNG seed,
-optimizer settings, basis set, geometry, and active space. CI reproduces
-the H2 CPU result on every push. The release workflow publishes the
-canonical container image to
-`ghcr.io/jgdynamite/cudaq-molecular-simulation-blueprint:<tag>` so any
-reader can pull-and-run the exact bits used in the blog post.
+GPU model, GPU UUID, driver version, OS, RNG seed, the realized initial
+parameter vector, optimizer settings, basis set, geometry, and active
+space. CI reproduces the H2 CPU result on every push.
+
+**Known provenance gaps in the 2026-07-27 results.** Manifests do *not*
+capture a container image ID or digest, a git SHA (the field is present but
+`null`, because the source tree is delivered to the host with `.git`
+excluded), a hostname, or the SciPy/NumPy versions. The image for that
+sweep was built on the VM under the mutable local tag
+`cudaq-blueprint:local`, was never pushed, and the VM has been destroyed,
+so the exact executed bits are not recoverable. The SciPy gap is material
+rather than pedantic: SciPy 1.16 replaced Powell's original COBYLA with the
+PRIMA reimplementation, so the precise optimizer that produced these
+numbers is not pinned down. The experiment-critical source under `app/`
+is byte-identical across the surrounding commits, which corroborates the
+code path without proving it.
+
+The release workflow publishes a container image to
+`ghcr.io/jgdynamite/cudaq-molecular-simulation-blueprint:<tag>` for
+readers who want to run the workload themselves. That image reproduces the
+*method*, not the exact binary used for the published numbers.
 
 ## License
 

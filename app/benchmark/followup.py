@@ -113,14 +113,18 @@ class FollowupRow:
             "function_evaluations": self.function_evaluations,
             "wall_seconds": f"{self.wall_seconds:.3f}",
             "time_per_evaluation_ms": f"{self.time_per_evaluation_ms:.4f}",
-            "energy_hartree": f"{self.energy_hartree:.9f}",
+            # 12 dp keeps the ~1e-13 Ha cross-backend agreement visible; 9 dp
+            # rounded it away. The error column is scientific for the same
+            # reason: a 2.99e-5 mHa residual formatted to 4 dp reads as
+            # exactly zero.
+            "energy_hartree": f"{self.energy_hartree:.12f}",
             "reference_hartree": (
-                "" if self.reference_hartree is None else f"{self.reference_hartree:.9f}"
+                "" if self.reference_hartree is None else f"{self.reference_hartree:.12f}"
             ),
             "absolute_error_mhartree": (
                 ""
                 if self.absolute_error_mhartree is None
-                else f"{self.absolute_error_mhartree:.4f}"
+                else f"{self.absolute_error_mhartree:.6e}"
             ),
             "chemical_accuracy_reached": (
                 ""
